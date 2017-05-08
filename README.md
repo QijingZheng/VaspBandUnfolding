@@ -6,8 +6,8 @@ In addition, by padding the planewave coefficients to a 3D grid and perform 3D
 Fourier Transfor, the pseudo-wavefunction in real space can also be obtained and
 save to file that can be view with `VESTA`. 
 
-With the knowledge of the planewave coefficients of KS staates, [transition
-dipole moment] (https://en.wikipedia.org/wiki/Transition_dipole_moment) can also
+With the knowledge of the planewave coefficients of KS staates,
+[transition dipole moment](https://en.wikipedia.org/wiki/Transition_dipole_moment) can also
 be calculated in reciprocal space.
 
 # Installation
