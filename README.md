@@ -1,4 +1,4 @@
-# pyvaspwfc
+# PyVaspwfc
 
 This is a python class for dealing with `VASP` pseudo-wavefunction file `WAVECAR`.
 It can be used to extract the planewave coefficients of any single Kohn-Sham (KS)
