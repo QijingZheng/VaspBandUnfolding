@@ -33,7 +33,7 @@ phi = wav.wfc_r(ikpt=2, iband=27, ngrid=wav._ngrid * 2)
 wav.save2vesta(phi)
 ```
 
-Below are the real and imaginary part of the selected KS orbital:
+Below are the real (left) and imaginary (right) part of the selected KS orbital:
 
-![real part](./examples/r_resize.png)
+![real part](./examples/r_resize.png) | 
 ![imaginary part](./examples/i_resize.png)
