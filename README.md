@@ -1,14 +1,15 @@
 # pyvaspwfc
 
 This is a python class for dealing with `VASP` pseudo-wavefunction file `WAVECAR`.
-It can extract the planewave coefficients of any single KS state from the file.
-In addition, by padding the planewave coefficients to a 3D grid and perform 3D
-Fourier Transfor, the pseudo-wavefunction in real space can also be obtained and
-saved to file that can be view with `VESTA`. 
+It can be used to extract the planewave coefficients of any single Kohn-Sham (KS)
+orbital from the file.  In addition, by padding the planewave coefficients to a
+3D grid and performing 3D Fourier Transfor, the pseudo-wavefunction in real space
+can also be obtained and saved to file that can be viewed with `VESTA`. 
 
-With the knowledge of the planewave coefficients of KS staates,
-[transition dipole moment](https://en.wikipedia.org/wiki/Transition_dipole_moment)
-can also be calculated in reciprocal space.
+With the knowledge of the planewave coefficients of the
+pseudo-wavefunction,
+[transition dipole moment](https://en.wikipedia.org/wiki/Transition_dipole_moment) between
+any two KS states can also be calculated.
 
 # Installation
 
@@ -18,3 +19,21 @@ path of the directory to `PYTHONPATH`
 ```bash
 export PYTHONPATH=/the/path/of/your/dir:${PYTHONPATH}
 ```
+
+# Examples
+
+```python
+from vaspwfc import vaspwfc
+
+wav = vaspwfc('./WAVECAR')
+# KS orbital in real space, double the size of the FT grid
+phi = wav.wfc_r(ikpt=2, iband=27, ngrid=wav._ngrid * 2)
+# Save the orbital into files. Since the wavefunction consist of complex
+# numbers, the real and imaginary part are saved separately.
+wav.save2vesta(phi)
+```
+
+Below are the real and imaginary part of the selected KS orbital:
+
+![real part](./examples/r_resize.png)
+![imaginary part](./examples/i_resize.png)
