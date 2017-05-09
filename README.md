@@ -3,8 +3,8 @@
 This is a python class for dealing with `VASP` pseudo-wavefunction file `WAVECAR`.
 It can be used to extract the planewave coefficients of any single Kohn-Sham (KS)
 orbital from the file.  In addition, by padding the planewave coefficients to a
-3D grid and performing 3D Fourier Transfor, the pseudo-wavefunction in real space
-can also be obtained and saved to file that can be viewed with `VESTA`. 
+3D grid and performing 3D Fourier Transform, the pseudo-wavefunction in real
+space can also be obtained and saved to file that can be viewed with `VESTA`. 
 
 With the knowledge of the planewave coefficients of the
 pseudo-wavefunction,
