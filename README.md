@@ -20,6 +20,11 @@ path of the directory to `PYTHONPATH`
 export PYTHONPATH=/the/path/of/your/dir:${PYTHONPATH}
 ```
 
+requirements
+
+* numpy
+* scipy
+
 # Examples
 
 ```python
