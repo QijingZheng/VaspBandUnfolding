@@ -41,6 +41,11 @@ class unfold():
         assert self.M.shape == (3,3), 'Shape of the tranformation matrix must be (3,3)'
 
         self.wfc = vaspwfc(wavecar)
+        # all the k-point coordinate in reciprocal space.
+        self.kvecs = self.wfc._kvecs.copy()
+        # Plane-waves with the cutoff sphere, let's just do it once for all.
+        self.allGvecs = np.array([self.wfc.gvectors(ikpt=kpt+1)
+                                  for kpt in range(self.wfc._nkpts)], dtype=int)
 
     def get_ovlap_G(self, ikpt=1, epsilon=1E-5):
         '''
@@ -49,8 +54,11 @@ class unfold():
         primitive cell.
         '''
 
+        assert 1 <= ikpt <= self.wfc._nkpts, 'Invalid K-point index!'
+
         # Reciprocal space vectors of the supercell in fractional unit
-        Gvecs = self.wfc.gvectors(ikpt=ikpt)
+        # Gvecs = self.wfc.gvectors(ikpt=ikpt)
+        Gvecs = self.allGvecs[ikpt - 1]
         # Shape of Gvecs: (nplws, 3)
         iGvecs = np.arange(Gvecs.shape[0], dtype=int)
 
@@ -68,11 +76,11 @@ class unfold():
         '''
         Spectral weight for a given k:
 
-            P_{Km} = \sum_n |<Km | kn>|^2
+            P_{Km}(k) = \sum_n |<Km | kn>|^2
 
         which is equivalent to
 
-            P_{Km} = \sum_{G} |C_{Km}(G + k - K)|^2
+            P_{Km}(k) = \sum_{G} |C_{Km}(G + k - K)|^2
 
         where {G} is a subset of the reciprocal space vectors of the supercell.
         '''
