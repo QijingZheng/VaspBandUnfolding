@@ -3,7 +3,9 @@
 
 ############################################################
 import numpy as np
+import multiprocessing
 from vaspwfc import vaspwfc
+
 ############################################################
 
 def find_K_from_k(k, M):
@@ -43,6 +45,16 @@ def GaussianSmearing(x, x0, sigma=0.02):
 
     return 1. / (np.sqrt(2*np.pi) * sigma) * np.exp(-(x - x0)**2 / (2*sigma**2))
 
+def removeDuplicateKpoints(kpoints):
+    '''
+    remove duplicate kpoints in the list.
+    '''
+    pass
+    # kpoints = np.array(kpoints)
+    # nkpt = len(kpoints)
+    #
+    # return kpoint[notDuplicateIndex]
+
 ############################################################
 
 class unfold():
@@ -73,22 +85,25 @@ class unfold():
 
             b = np.dot(M.T, B);    B = np.dot(np.linalg.inv(M).T, b)    
 
-        wfc is the WAVECAR file that contains the wavefunction information of a
-        supercell calculation.
+        wavecar is the location of VASP WAVECAR file that contains the
+        wavefunction information of a supercell calculation.
         '''
 
         self.M = np.array(M, dtype=float)
         assert self.M.shape == (3,3), 'Shape of the tranformation matrix must be (3,3)'
 
         self.wfc = vaspwfc(wavecar)
-        # all the k-point coordinate in reciprocal space.
+        # all the K-point vectors
         self.kvecs = self.wfc._kvecs
-        # all the ks energies
+        # all the KS energies
         self.bands = self.wfc._bands
 
         # G-vectors within the cutoff sphere, let's just do it once for all.
         # self.allGvecs = np.array([self.wfc.gvectors(ikpt=kpt+1)
         #                           for kpt in range(self.wfc._nkpts)], dtype=int)
+
+        # spectral weight for all the kpoints
+        self.SW = None
 
     def get_ovlap_G(self, ikpt=1, epsilon=1E-5):
         '''
@@ -174,7 +189,69 @@ class unfold():
                     self.wfc.readBandCoeff(ispin=1, ikpt=ikpt, iband=nb + 1, norm=True)
             # energy
             E_Km[nb] = self.bands[0,ikpt-1,nb]
-            # spectral weight
-            P_Km[nb] = np.linalg.norm(wfc_k_3D[GnewIndex[:,0], GnewIndex[:,1], GnewIndex[:,2]])**2
+            # spectral weight 
+            P_Km[nb] = np.linalg.norm(
+                        wfc_k_3D[GnewIndex[:,0], GnewIndex[:,1], GnewIndex[:,2]]
+                    )**2
 
-        return E_Km, P_Km
+        return np.array((E_Km, P_Km), dtype=float).T
+
+    def spectral_weight(self, kpoints, nproc=None):
+        '''
+        Calculate the spectral weight for a list of kpoints in the primitive BZ.
+        Here, we use "multiprocessing" package to parallel over the kpoints.
+        '''
+
+        NKPTS = len(kpoints)
+
+        if nproc is None:
+            nproc = multiprocessing.cpu_count()
+
+        pool = multiprocessing.Pool(processes=nproc)
+
+        results = []
+        for ik in range(NKPTS):
+            res = pool.apply_async(self.spectral_weight_k, (kpoints[ik],))
+            results.append(res)
+
+        self.SW = np.array([res.get() for res in results], dtype=float)
+
+        pool.close()
+        pool.join()
+
+        return self.SW
+        
+    def spectral_function(self, nedos=4000, sigma=0.02):
+        '''
+        Generate the spectral function
+
+            A(k_i, E) = \sum_m P_{Km}(k_i)\Delta(E - Em)
+
+        Where the \Delta function can be approximated by Lorentzian or Gaussian
+        function.
+        '''
+
+        assert self.SW is not None, 'Spectral weight must be calculated first!'
+
+        # Number of kpoints
+        nk = self.SW.shape[0]
+        # spectral function
+        SF = np.zeros(nk, nedos)
+
+        emin = self.SW[:,:,0].min()
+        emax = self.SW[:,:,0].max()
+        e0 = np.linspace(emin - 5 * sigma, emax + 5 * sigma, nedos)
+
+        for ii in range(nk):
+            E_Km = self.SW[ii,:,0]
+            P_Km = self.SW[ii,:,1]
+
+            SF[ii,:] = np.sum(
+                        LorentzSmearing(
+                            e0[:,np.newaxis], E_Km[np.newaxis,:],
+                            sigma=sigma
+                        ) * P_Km[np.newaxis,:], axis=1
+                    )
+        return SF
+
+############################################################
