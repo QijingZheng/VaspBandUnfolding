@@ -106,6 +106,11 @@ performed with `VASP` and the input files can be found in the
    ```python
    from unfold import unfold
 
+   # basis vector of the primitive cell
+   cell = [[ 3.1850, 0.0000000000000000,  0.0],
+           [-1.5925, 2.7582909110534373,  0.0],
+           [ 0.0000, 0.0000000000000000, 35.0]]
+
    WaveSuper = unfold(M=M, wavecar='WAVECAR')
    sw = WaveSuper.spectral_weight(kpath)
    e0, sf = WaveSuper.spectral_function(nedos=4000)
@@ -120,7 +125,7 @@ performed with `VASP` and the input files can be found in the
            ylim=(-3, 4))
    ```
 
-   The EBS of from a 3x3x1 supercell calculation are shown below:
+   The EBS from a 3x3x1 supercell calculation are shown below:
 
    ![real part](./examples/unfold/sup_3x3x1/ebs_s_resize.png) | 
    ![imaginary part](./examples/unfold/sup_3x3x1/ebs_c_resize.png)
