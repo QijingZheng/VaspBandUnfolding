@@ -100,4 +100,27 @@ performed with `VASP` and the input files can be found in the
     ```
 3. Do one non-SCF calculation of the supercell using the folded K-points and
    obtain the corresponding pseudo-wavefunction. The input files are in
-   `examples/unfold/sup_3x3x1/unfold`.
+   `examples/unfold/sup_3x3x1/unfold`. The effective band structure (EBS) and
+   then be obtained by processing the WAVECAR file.
+
+   ```python
+   from unfold import unfold
+
+   WaveSuper = unfold(M=M, wavecar='WAVECAR')
+   sw = WaveSuper.spectral_weight(kpath)
+   e0, sf = WaveSuper.spectral_function(nedos=4000)
+
+   # show the effective band structure with scatter
+   EBS_scatter(kpath, cell, sw, nseg=30, eref=-4.01,
+           ylim=(-3, 4), 
+           factor=5)
+   # or show the effective band structure with colormap
+   EBS_cmaps(kpath, cell, e0, sf, nseg=30, eref=-4.01,
+           show=False,
+           ylim=(-3, 4))
+   ```
+
+   The EBS of from a 3x3x1 supercell calculation are shown below:
+
+   ![real part](./examples/unfold/sup_3x3x1/ebs_s_resize.png) | 
+   ![imaginary part](./examples/unfold/sup_3x3x1/ebs_c_resize.png)
