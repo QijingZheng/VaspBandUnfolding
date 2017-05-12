@@ -6,10 +6,23 @@ orbital from the file.  In addition, by padding the planewave coefficients to a
 3D grid and performing 3D Fourier Transform, the pseudo-wavefunction in real
 space can also be obtained and saved to file that can be viewed with `VESTA`. 
 
+## Transition dipole moment
+
 With the knowledge of the planewave coefficients of the
 pseudo-wavefunction,
 [transition dipole moment](https://en.wikipedia.org/wiki/Transition_dipole_moment) between
 any two KS states can also be calculated.
+
+## Band unfolding
+
+Using the pseudo-wavefunction from supercell calculation, it is possible to
+perform electronic band structure unfolding to obtain the effective band
+structure. For more information, please refer to the following article and the
+[GPAW](https://wiki.fysik.dtu.dk/gpaw/tutorials/unfold/unfold.html) site.
+
+> V. Popescu and A. Zunger Extracting E versus k effective band structure
+> from supercell calculations on alloys and impurities Phys. Rev. B 85, 085201
+> (2012)
 
 # Installation
 
