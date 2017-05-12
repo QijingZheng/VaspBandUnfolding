@@ -113,12 +113,14 @@ performed with `VASP` and the input files can be found in the
 
    WaveSuper = unfold(M=M, wavecar='WAVECAR')
 
+   from unfold import EBS_scatter
    sw = WaveSuper.spectral_weight(kpath)
    # show the effective band structure with scatter
    EBS_scatter(kpath, cell, sw, nseg=30, eref=-4.01,
            ylim=(-3, 4), 
            factor=5)
 
+   from unfold import EBS_cmaps
    e0, sf = WaveSuper.spectral_function(nedos=4000)
    # or show the effective band structure with colormap
    EBS_cmaps(kpath, cell, e0, sf, nseg=30, eref=-4.01,
