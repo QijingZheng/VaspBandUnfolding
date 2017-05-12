@@ -131,7 +131,8 @@ performed with `VASP` and the input files can be found in the
    ![real part](./examples/unfold/sup_3x3x1/ebs_s_resize.png) | 
    ![imaginary part](./examples/unfold/sup_3x3x1/ebs_c_resize.png)
    
-   Another example of EBS from a 3x3x1 supercell with S vacancy.
+   Another example of EBS from a 3x3x1 supercell calculation, where we introduce a
+   `S` vacancy in the structure.
 
    ![real part](./examples/unfold/sup_3x3x1_defect/ebs_s_resize.png) | 
    ![imaginary part](./examples/unfold/sup_3x3x1_defect/ebs_c_resize.png)
