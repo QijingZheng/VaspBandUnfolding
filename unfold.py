@@ -76,6 +76,112 @@ def make_kpath(kbound, nseg=40):
     kpath.append(kbound[-1])
     return kpath
 
+def EBS_scatter(kpts, cell, spectral_weight,
+                eref=0.0,
+                nseg=None, save='ebs_s.png',
+                factor=20, figsize=(3.0, 4.0),
+                ylim=(-3, 3), show=True,
+                color='b'):
+    '''
+    plot the effective band structure with scatter, the size of the scatter
+    indicates the spectral weight.
+    The plotting function utilizes Matplotlib package.
+
+    inputs:
+        kpts: the kpoints vectors in fractional coordinates.
+        cell: the primitive cell basis
+        spectral_weight: self-explanatory
+    '''
+
+    import matplotlib as mpl
+    import matplotlib.pyplot as plt
+
+    mpl.rcParams['axes.unicode_minus'] = False
+
+    kpt_c = np.dot(kpts, np.linalg.inv(cell).T)
+    kdist = np.r_[0, np.cumsum(
+                            np.linalg.norm(
+                                np.diff(kpt_c, axis=0),
+                                axis=1
+                            ))]
+    nk = kdist.size
+    nb = spectral_weight.shape[1]
+    x0 = np.ones(nb)
+
+    fig = plt.figure()
+    fig.set_size_inches(figsize)
+    ax = plt.subplot(111)
+
+    for ik in range(nk):
+        ax.scatter(kdist[ik] * x0,
+                   spectral_weight[ik,:,0] - eref,
+                   s=spectral_weight[ik,:,1] * factor,
+                   lw=0.0,
+                   color=color)
+
+    ax.set_xlim(0, kdist.max())
+    ax.set_ylim(*ylim)
+    ax.set_ylabel('Energy [eV]', labelpad=5)
+
+    if nseg:
+        for kb in kdist[::nseg]:
+            ax.axvline(x=kb, lw=0.5, color='k')
+
+    plt.tight_layout(pad=0.2)
+    plt.savefig(save, dpi=360)
+    if show: plt.show()
+
+def EBS_cmaps(kpts, cell, E0, spectral_function,
+              eref=0.0, nseg=None,
+              save='ebs_c.png',
+              figsize=(3.0, 4.0),
+              ylim=(-3, 3), show=True,
+              cmap='jet'):
+    '''
+    plot the effective band structure with colormaps.  The plotting function
+    utilizes Matplotlib package.
+
+    inputs:
+        kpts: the kpoints vectors in fractional coordinates.
+        cell: the primitive cell basis
+        spectral_weight: self-explanatory
+    '''
+
+    import matplotlib as mpl
+    import matplotlib.pyplot as plt
+
+    mpl.rcParams['axes.unicode_minus'] = False
+
+    kpt_c = np.dot(kpts, np.linalg.inv(cell).T)
+    kdist = np.r_[0, np.cumsum(
+                            np.linalg.norm(
+                                np.diff(kpt_c, axis=0),
+                                axis=1
+                            ))]
+    nk = kdist.size
+    xmin, xmax = kdist.min(), kdist.max()
+    # ymin, ymax = E0.min() - eref, E0.max() - eref
+
+    fig = plt.figure()
+    fig.set_size_inches(figsize)
+    ax = plt.subplot(111)
+
+    # ax.imshow(spectral_function, extent=(xmin, xmax, ymin, ymax), 
+    #           origin='lower', aspect='auto', cmap=cmap)
+    X, Y = np.meshgrid(kdist, E0 - eref)
+    ax.contourf(X, Y, spectral_function, cmap=cmap)
+
+    ax.set_xlim(xmin, xmax)
+    ax.set_ylim(*ylim)
+    ax.set_ylabel('Energy [eV]', labelpad=5)
+
+    if nseg:
+        for kb in kdist[::nseg]:
+            ax.axvline(x=kb, lw=0.5, color='k')
+
+    plt.tight_layout(pad=0.2)
+    plt.savefig(save, dpi=360)
+    if show: plt.show()
 ############################################################
 
 class unfold():
@@ -178,6 +284,8 @@ class unfold():
         where {G} is a subset of the reciprocal space vectors of the supercell.
         '''
 
+        print 'Processing k-point %8.4f %8.4f %8.4f' % (k0[0], k0[1], k0[2])
+
         # find the K0 onto which k0 folds
         # k0 = G0 + K0
         K0, G0 = find_K_from_k(k0, self.M)
@@ -269,7 +377,7 @@ class unfold():
         # Number of kpoints
         nk = self.SW.shape[0]
         # spectral function
-        SF = np.zeros(nk, nedos)
+        SF = np.zeros((nedos, nk), dtype=float)
 
         emin = self.SW[:,:,0].min()
         emax = self.SW[:,:,0].max()
@@ -279,12 +387,58 @@ class unfold():
             E_Km = self.SW[ii,:,0]
             P_Km = self.SW[ii,:,1]
 
-            SF[ii,:] = np.sum(
+            SF[:,ii] = np.sum(
                         LorentzSmearing(
                             e0[:,np.newaxis], E_Km[np.newaxis,:],
                             sigma=sigma
                         ) * P_Km[np.newaxis,:], axis=1
                     )
-        return SF
+        return e0, SF
 
 ############################################################
+
+if __name__ == '__main__':
+    M = [[3.0, 0.0, 0.0],
+         [0.0, 3.0, 0.0],
+         [0.0, 0.0, 1.0]]
+
+    kpts = [[0.0, 0.5, 0.0],
+            [0.0, 0.0, 0.0],
+            [1./3, 1./3, 0.0],
+            [0.0, 0.5, 0.0]]
+
+    kpath = make_kpath(kpts, nseg=30)
+
+    K_in_sup = []
+    for kk in kpath:
+        kg, g = find_K_from_k(kk, M)
+        K_in_sup.append(kg)
+    reducedK = removeDuplicateKpoints(K_in_sup)
+
+    import os
+    # from ase.io import read, write
+    #
+    # pos = read('POSCAR.p', format='vasp')
+    # cell = pos.cell
+    cell = [[ 3.1850, 0.0000000000000000,  0.0],
+            [-1.5925, 2.7582909110534373,  0.0],
+            [ 0.0000, 0.0000000000000000, 35.0]]
+
+    if os.path.isfile('spectral_function.npy'):
+        sw = np.load('spectral_weight.npy')
+        sf = np.load('spectral_function.npy')
+        e0 = np.load('energy.npy')
+    else:
+        fwave = unfold(M=M, wavecar='WAVECAR')
+        sw = fwave.spectral_weight(kpath)
+        e0, sf = fwave.spectral_function(nedos=4000)
+        np.save('spectral_weight.npy', sw)
+        np.save('spectral_function.npy', sf)
+        np.save('energy.npy', e0)
+
+    EBS_scatter(kpath, cell, sw, nseg=30, eref=-4.01,
+            ylim=(-3, 4), show=False,
+            factor=5)
+    EBS_cmaps(kpath, cell, e0, sf, nseg=30, eref=-4.01,
+            show=False,
+            ylim=(-3, 4))
