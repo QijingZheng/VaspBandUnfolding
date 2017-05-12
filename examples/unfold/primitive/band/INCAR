@@ -1,0 +1,35 @@
+General
+    SYSTEM = Mo S
+      PREC = High
+#      ENCUT = 400 eV
+     ISPIN = 1
+    ISTART = 0
+    ICHARG = 11
+
+Dos Related values
+      NPAR = 2
+    LPLANE = .TRUE.
+    ISMEAR = 0
+     SIGMA = 0.1
+    LORBIT = 11
+
+Ionic Relaxation
+    IBRION = -1
+       NSW = 0
+
+Electronic relaxation
+#      IALGO = 38
+      ALGO = Fast
+    NELMIN = 4
+      NELM = 120
+     EDIFF = 1E-7
+    NBANDS = 48
+
+Writing Flag
+     LWAVE = .FALSE.
+    LCHARG = .FALSE.
+
+VDW-D2
+      LVDW = .TRUE.
+    VDW_C6 = 24.67 5.57 
+    VDW_R0 = 1.639 1.683 

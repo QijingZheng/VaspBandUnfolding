@@ -55,8 +55,8 @@ wav.save2vesta(phi)
 
 Below are the real (left) and imaginary (right) part of the selected KS orbital:
 
-![real part](./examples/r_resize.png) | 
-![imaginary part](./examples/i_resize.png)
+![real part](./examples/wfc_r/r_resize.png) | 
+![imaginary part](./examples/wfc_r/i_resize.png)
 
 ## Band unfolding 
 
