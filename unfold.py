@@ -49,11 +49,32 @@ def removeDuplicateKpoints(kpoints):
     '''
     remove duplicate kpoints in the list.
     '''
-    pass
-    # kpoints = np.array(kpoints)
-    # nkpt = len(kpoints)
-    #
-    # return kpoint[notDuplicateIndex]
+    kpoints = np.array(
+            sorted(kpoints, key=lambda x: (x[0], x[1], x[2]))
+            )
+    kdiff = np.diff(kpoints, axis=0)
+    match = np.abs(np.linalg.norm(kdiff, axis=1)) > 1E-5
+
+    return kpoints[np.r_[True, match]]
+
+def make_kpath(kbound, nseg=40):
+    '''
+    make a list of kpoints defining the path between the given kpoints. 
+    '''
+    kbound = np.array(kbound, dtype=float)
+    kdist  = np.diff(kbound, axis=0)
+
+    # kpath = []
+    # for ii in range(len(kdist)):
+    #     for nk in range(nseg):
+    #         kpt = kbound[ii] + kdist[ii] / nseg * nk
+    #         kpath.append(kpt)
+
+    kpath = [kbound[ii] + kdist[ii] / nseg * nk
+             for ii in range(len(kdist))
+             for nk in range(nseg)]
+    kpath.append(kbound[-1])
+    return kpath
 
 ############################################################
 
