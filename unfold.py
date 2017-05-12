@@ -161,7 +161,7 @@ class unfold():
 
         for ii in range(self.wfc._nkpts):
             if np.alltrue(
-                    np.abs(self.wfc._kvec[ii] - K0) < 1E-5
+                    np.abs(self.wfc._kvecs[ii] - K0) < 1E-5
                ):
                 return ii + 1
 
@@ -212,36 +212,48 @@ class unfold():
             E_Km[nb] = self.bands[0,ikpt-1,nb]
             # spectral weight 
             P_Km[nb] = np.linalg.norm(
-                        wfc_k_3D[GnewIndex[:,0], GnewIndex[:,1], GnewIndex[:,2]]
+                        wfc_k_3D[GoffsetIndex[:,0], GoffsetIndex[:,1], GoffsetIndex[:,2]]
                     )**2
 
         return np.array((E_Km, P_Km), dtype=float).T
 
-    def spectral_weight(self, kpoints, nproc=None):
+    # def spectral_weight(self, kpoints, nproc=None):
+    #     '''
+    #     Calculate the spectral weight for a list of kpoints in the primitive BZ.
+    #     Here, we use "multiprocessing" package to parallel over the kpoints.
+    #     '''
+    #
+    #     NKPTS = len(kpoints)
+    #
+    #     if nproc is None:
+    #         nproc = multiprocessing.cpu_count()
+    #
+    #     pool = multiprocessing.Pool(processes=nproc)
+    #
+    #     results = []
+    #     for ik in range(NKPTS):
+    #         res = pool.apply_async(self.spectral_weight_k, (kpoints[ik],))
+    #         results.append(res)
+    #
+    #     self.SW = np.array([res.get() for res in results], dtype=float)
+    #
+    #     pool.close()
+    #     pool.join()
+    #
+    #     return self.SW
+        
+    def spectral_weight(self, kpoints):
         '''
         Calculate the spectral weight for a list of kpoints in the primitive BZ.
-        Here, we use "multiprocessing" package to parallel over the kpoints.
         '''
 
         NKPTS = len(kpoints)
 
-        if nproc is None:
-            nproc = multiprocessing.cpu_count()
-
-        pool = multiprocessing.Pool(processes=nproc)
-
-        results = []
-        for ik in range(NKPTS):
-            res = pool.apply_async(self.spectral_weight_k, (kpoints[ik],))
-            results.append(res)
-
-        self.SW = np.array([res.get() for res in results], dtype=float)
-
-        pool.close()
-        pool.join()
+        self.SW = np.array([self.spectral_weight_k(kpoints[ik])
+                            for ik in range(NKPTS)], dtype=float)
 
         return self.SW
-        
+
     def spectral_function(self, nedos=4000, sigma=0.02):
         '''
         Generate the spectral function
