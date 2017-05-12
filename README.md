@@ -112,13 +112,14 @@ performed with `VASP` and the input files can be found in the
            [ 0.0000, 0.0000000000000000, 35.0]]
 
    WaveSuper = unfold(M=M, wavecar='WAVECAR')
-   sw = WaveSuper.spectral_weight(kpath)
-   e0, sf = WaveSuper.spectral_function(nedos=4000)
 
+   sw = WaveSuper.spectral_weight(kpath)
    # show the effective band structure with scatter
    EBS_scatter(kpath, cell, sw, nseg=30, eref=-4.01,
            ylim=(-3, 4), 
            factor=5)
+
+   e0, sf = WaveSuper.spectral_function(nedos=4000)
    # or show the effective band structure with colormap
    EBS_cmaps(kpath, cell, e0, sf, nseg=30, eref=-4.01,
            show=False,
@@ -129,3 +130,8 @@ performed with `VASP` and the input files can be found in the
 
    ![real part](./examples/unfold/sup_3x3x1/ebs_s_resize.png) | 
    ![imaginary part](./examples/unfold/sup_3x3x1/ebs_c_resize.png)
+   
+   Another example of EBS from a 3x3x1 supercell with S vacancy.
+
+   ![real part](./examples/unfold/sup_3x3x1_defect/ebs_s_resize.png) | 
+   ![imaginary part](./examples/unfold/sup_3x3x1_defect/ebs_c_resize.png)
