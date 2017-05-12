@@ -45,12 +45,12 @@ requirements
 ```python
 from vaspwfc import vaspwfc
 
-wav = vaspwfc('./WAVECAR')
+wav = vaspwfc('./examples/wfc_r/WAVECAR')
 # KS orbital in real space, double the size of the FT grid
 phi = wav.wfc_r(ikpt=2, iband=27, ngrid=wav._ngrid * 2)
 # Save the orbital into files. Since the wavefunction consist of complex
 # numbers, the real and imaginary part are saved separately.
-wav.save2vesta(phi)
+wav.save2vesta(phi, poscar='./examples/wfc_r/POSCAR')
 ```
 
 Below are the real (left) and imaginary (right) part of the selected KS orbital:
@@ -66,3 +66,31 @@ performed with `VASP` and the input files can be found in the
 `examples/unfold/primitive`
 
 ![band_primitive_cell](examples/unfold/primitive/band/band_p.png)
+
+1. In the first step, generate band path in the primitive Brillouin Zone (PBZ)
+   and find the correspondig K points of the supercell BZ (SBZ) onto which they
+   fold. Suppose the supercell size is 3x3x1 of the primitive cell.
+
+```python
+from unfold import make_kpath, removeDuplicateKpoints
+
+# high-symmetry point of a Hexagonal BZ in fractional coordinate
+kpts = [[0.0, 0.5, 0.0],            # M
+        [0.0, 0.0, 0.0],            # G
+        [1./3, 1./3, 0.0],          # K
+        [0.0, 0.5, 0.0]]            # M
+# The tranformation matrix between supercell and primitive cell.
+M = [[3.0, 0.0, 0.0],
+     [0.0, 3.0, 0.0],
+     [0.0, 0.0, 1.0]]
+# create band path from the high-symmetry points, 30 points inbetween each pair
+# of high-symmetry points
+kpath = make_kpath(kpts, nseg=30)
+K_in_sup = []
+for kk in kpath:
+    kg, g = find_K_from_k(kk, M)
+    K_in_sup.append(kg)
+# remove the duplicate K-points
+reducedK = removeDuplicateKpoints(K_in_sup)
+```
+
