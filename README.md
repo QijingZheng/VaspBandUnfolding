@@ -138,3 +138,14 @@ performed with `VASP` and the input files can be found in the
 
    ![real part](./examples/unfold/sup_3x3x1_defect/ebs_s_resize.png) | 
    ![imaginary part](./examples/unfold/sup_3x3x1_defect/ebs_c_resize.png)
+
+   Yet another band unfolding example from a tetragonal 3x3x1 supercell
+   calculation, where the transformation matrix is
+
+   ```python
+    M = [[3.0, 0.0, 0.0],
+         [3.0, 6.0, 0.0],
+         [0.0, 0.0, 1.0]]
+   ```
+   ![real part](./examples/unfold/tet_3x3x1/ebs_s_resize.png) | 
+   ![imaginary part](./examples/unfold/tet_3x3x1/ebs_c_resize.png)
