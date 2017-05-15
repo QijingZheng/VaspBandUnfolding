@@ -153,5 +153,4 @@ performed with `VASP` and the input files can be found in the
 
    Compared to the band structure of the primitive cell, there are some empty
    states at the top of figure. This is due to a too small value of `NBANDS` in
-   supercell calculation, and thus those states are not included in the
-   calculation. 
+   supercell non-scf calculation, and thus those states are not included.
