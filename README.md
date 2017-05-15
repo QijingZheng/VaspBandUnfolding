@@ -37,6 +37,7 @@ requirements
 
 * numpy
 * scipy
+* matplotlib
 
 # Examples
 
@@ -81,7 +82,7 @@ performed with `VASP` and the input files can be found in the
    fold.
 
     ```python
-    from unfold import make_kpath, removeDuplicateKpoints
+    from unfold import make_kpath, removeDuplicateKpoints, find_K_from_k
 
     # high-symmetry point of a Hexagonal BZ in fractional coordinate
     kpts = [[0.0, 0.5, 0.0],            # M
@@ -149,3 +150,8 @@ performed with `VASP` and the input files can be found in the
    ```
    ![real part](./examples/unfold/tet_3x3x1/ebs_s_resize.png) | 
    ![imaginary part](./examples/unfold/tet_3x3x1/ebs_c_resize.png)
+
+   Compared to the band structure of the primitive cell, there are some empty
+   states at the top of figure. This is due to a too small value of `NBANDS` in
+   supercell calculation, and thus those states are not included in the
+   calculation. 
