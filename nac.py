@@ -8,8 +8,8 @@ from vaspwfc import vaspwfc
 
 ############################################################
 
-def nac_from_vaspwfc(waveA, waveB, dt=1.0
-                     ikpt=1, ispin=1):
+def nac_from_vaspwfc(waveA, waveB,
+                     dt=1.0, ikpt=1, ispin=1):
     '''
     Calculate Nonadiabatic Couplings (NAC) from two WAVECARs
     <psi_i(t)| d/dt |(psi_j(t))> ~=~
@@ -45,8 +45,8 @@ def nac_from_vaspwfc(waveA, waveB, dt=1.0
             ci_tdt = phi_i.readBandCoeff(ispin, ikpt, ib1, norm=True)
             cj_tdt = phi_j.readBandCoeff(ispin, ikpt, ib2, norm=True)
 
-            nacs[jj, ii] = np.sum(ci_t.conj() * cj_dtd) - np.sum(cj_t.conj() * ci_tdt)
-            nacs[ii, jj] = -nacs[jj, ii]
+            nacs[ii,jj] = np.sum(ci_t.conj() * cj_dtd) - np.sum(cj_t.conj() * ci_tdt)
+            nacs[jj,ii] = -nacs[ii,jj]
 
     return nacs / (2 * dt)
             
