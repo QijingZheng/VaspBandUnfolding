@@ -98,8 +98,8 @@ def parallel_nac_calc(runDirs, nproc=None, gamma=True,
 
         prefix = os.path.dirname(runDirs[ii])
 
-        np.savetxt(prefix + '/eig.txt', et)
-        np.savetxt(prefix + '/nac.txt', nc)
+        np.save(prefix + '/eig.npy', et)
+        np.save(prefix + '/nac.npy', nc)
 
 
 ############################################################
