@@ -42,8 +42,11 @@ def nac_from_vaspwfc(waveA, waveB, gamma=True,
     nacType = np.float if gamma else np.complex
     nacs = np.zeros((nbands, nbands), dtype=nacType)
 
+    # from time import time
+
     for ii in range(nbands):
         for jj in range(ii):
+            # t1 = time()
             ib1 = ii + 1
             ib2 = jj + 1
 
@@ -57,6 +60,9 @@ def nac_from_vaspwfc(waveA, waveB, gamma=True,
 
             nacs[ii,jj] = tmp.real if gamma else tmp
             nacs[jj,ii] = -nacs[ii,jj]
+
+            # t2 = time()
+            # print 'Elapsed Time: %.4f [s]' % (t2 - t1)
 
     # EnT = (phi_i._bands[ispin-1,ikpt-1,:] + phi_j._bands[ispin-1,ikpt-1,:]) / 2.
     EnT = phi_i._bands[ispin-1,ikpt-1,:]
