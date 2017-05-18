@@ -8,7 +8,7 @@ from vaspwfc import vaspwfc
 
 ############################################################
 
-def nac_from_vaspwfc(waveA, waveB,
+def nac_from_vaspwfc(waveA, waveB, gamma=True,
                      dt=1.0, ikpt=1, ispin=1):
     '''
     Calculate Nonadiabatic Couplings (NAC) from two WAVECARs
@@ -18,6 +18,7 @@ def nac_from_vaspwfc(waveA, waveB,
     inputs:
         waveA:  path of WAVECAR A
         waveB:  path of WAVECAR B
+        gamma:  gamma version wavecar
         dt:     ionic time step, in [fs]          
         ikpt:   which k-point, starting from 1
         ispin:  which spin, 1 or 2
@@ -37,7 +38,8 @@ def nac_from_vaspwfc(waveA, waveB,
     assert phi_i._nplws[ikpt-1] == phi_j._nplws[ikpt-1], '#nplws not match!'
 
     nbands = phi_i._nbands
-    nacs = np.zeros((nbands, nbands), dtype=np.complex128)
+    nacType = np.float if gamma else np.complex
+    nacs = np.zeros((nbands, nbands), dtype=nacType)
 
     for ii in range(nbands):
         for jj in range(ii):
@@ -50,11 +52,17 @@ def nac_from_vaspwfc(waveA, waveB,
             ci_tdt = phi_j.readBandCoeff(ispin, ikpt, ib1, norm=True)
             cj_tdt = phi_j.readBandCoeff(ispin, ikpt, ib2, norm=True)
 
-            nacs[ii,jj] = np.sum(ci_t.conj() * cj_tdt) - np.sum(cj_t.conj() * ci_tdt)
+            tmp = np.sum(ci_t.conj() * cj_tdt) - np.sum(cj_t.conj() * ci_tdt)
+
+            nacs[ii,jj] = tmp.real if gamma else tmp
             nacs[jj,ii] = -nacs[ii,jj]
 
     # EnT = (phi_i._bands[ispin-1,ikpt-1,:] + phi_j._bands[ispin-1,ikpt-1,:]) / 2.
     EnT = phi_i._bands[ispin-1,ikpt-1,:]
+
+    # close the wavecar
+    phi_i._wfc.close()
+    phi_j._wfc.close()
 
     return EnT, nacs / (2 * dt)
 
