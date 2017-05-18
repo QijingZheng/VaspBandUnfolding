@@ -21,15 +21,20 @@ def nac_from_vaspwfc(waveA, waveB,
         dt:     ionic time step, in [fs]          
         ikpt:   which k-point, starting from 1
         ispin:  which spin, 1 or 2
+
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !!!! Note, this method is way too slow than fortran code !!!!
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
     '''
 
-    phi_i = vaspwfc(waveA)
-    phi_j = vaspwfc(waveB)
+    phi_i = vaspwfc(waveA)      # wavecar at t
+    phi_j = vaspwfc(waveB)      # wavecar at t + dt
 
     print 'Calculating NACs between <%s> and <%s>' % (waveA, waveB)
 
     assert phi_i._nbands == phi_j._nbands, '#bands not match!'
-    assert phi_i._nplws[ikpt-1] == phi_j.nplw[ikpt-1], '#nplws not match!'
+    assert phi_i._nplws[ikpt-1] == phi_j._nplws[ikpt-1], '#nplws not match!'
 
     nbands = phi_i._nbands
     nacs = np.zeros((nbands, nbands), dtype=np.complex128)
@@ -40,14 +45,32 @@ def nac_from_vaspwfc(waveA, waveB,
             ib2 = jj + 1
 
             ci_t   = phi_i.readBandCoeff(ispin, ikpt, ib1, norm=True)
-            cj_t   = phi_j.readBandCoeff(ispin, ikpt, ib2, norm=True)
+            cj_t   = phi_i.readBandCoeff(ispin, ikpt, ib2, norm=True)
 
-            ci_tdt = phi_i.readBandCoeff(ispin, ikpt, ib1, norm=True)
+            ci_tdt = phi_j.readBandCoeff(ispin, ikpt, ib1, norm=True)
             cj_tdt = phi_j.readBandCoeff(ispin, ikpt, ib2, norm=True)
 
-            nacs[ii,jj] = np.sum(ci_t.conj() * cj_dtd) - np.sum(cj_t.conj() * ci_tdt)
+            nacs[ii,jj] = np.sum(ci_t.conj() * cj_tdt) - np.sum(cj_t.conj() * ci_tdt)
             nacs[jj,ii] = -nacs[ii,jj]
 
-    return nacs / (2 * dt)
-            
+    # EnT = (phi_i._bands[ispin-1,ikpt-1,:] + phi_j._bands[ispin-1,ikpt-1,:]) / 2.
+    EnT = phi_i._bands[ispin-1,ikpt-1,:]
 
+    return EnT, nacs / (2 * dt)
+
+############################################################
+# a test
+############################################################
+
+if __name__ == '__main__':
+    WaveCars = ['./run/%03d/WAVECAR' % (ii + 1) for ii in range(10)]
+
+    ii = 1
+    for w1, w2 in zip(WaveCars[:-1], WaveCars[1:]):
+        et, nac = nac_from_vaspwfc(w1, w2)
+
+        np.savetxt('run/%03d/eig.txt' % ii, et)
+        np.savetxt('run/%03d/nac.txt' % ii, nac)
+        
+        ii += 1
+        if ii > 1: break
