@@ -10,6 +10,7 @@ from vaspwfc import vaspwfc
 ############################################################
 
 def nac_from_vaspwfc(waveA, waveB, gamma=True,
+                     bmin=None, bmax=None,
                      dt=1.0, ikpt=1, ispin=1):
     '''
     Calculate Nonadiabatic Couplings (NAC) from two WAVECARs
@@ -38,17 +39,19 @@ def nac_from_vaspwfc(waveA, waveB, gamma=True,
     assert phi_i._nbands == phi_j._nbands, '#bands not match!'
     assert phi_i._nplws[ikpt-1] == phi_j._nplws[ikpt-1], '#nplws not match!'
 
-    nbands = phi_i._nbands
+    bmin = 1 if bmin is None else bmin
+    bmax = phi_i._nbands if bmax is None else bmax
+    nbasis = bmax - bmin + 1
+
     nacType = np.float if gamma else np.complex
-    nacs = np.zeros((nbands, nbands), dtype=nacType)
+    nacs = np.zeros((nbasis, nbasis), dtype=nacType)
 
     # from time import time
-
-    for ii in range(nbands):
+    for ii in range(nbasis):
         for jj in range(ii):
             # t1 = time()
-            ib1 = ii + 1
-            ib2 = jj + 1
+            ib1 = ii + bmin
+            ib2 = jj + bmin
 
             ci_t   = phi_i.readBandCoeff(ispin, ikpt, ib1, norm=True)
             cj_t   = phi_i.readBandCoeff(ispin, ikpt, ib2, norm=True)
@@ -75,6 +78,7 @@ def nac_from_vaspwfc(waveA, waveB, gamma=True,
 
 
 def parallel_nac_calc(runDirs, nproc=None, gamma=True,
+                      bmin=None, bmax=None,
                       ikpt=1, ispin=1, dt=1.0):
     '''
     Parallel calculation of NACs using python multiprocessing package.
@@ -86,7 +90,7 @@ def parallel_nac_calc(runDirs, nproc=None, gamma=True,
 
     results = []
     for w1, w2 in zip(runDirs[:-1], runDirs[1:]):
-        res = pool.apply_async(nac_from_vaspwfc, (w1, w2, gamma, dt, ikpt, ispin,))
+        res = pool.apply_async(nac_from_vaspwfc, (w1, w2, gamma, bmin, bmax, dt, ikpt, ispin,))
         results.append(res)
 
     for ii in range(len(runDirs)-1):
@@ -105,5 +109,5 @@ def parallel_nac_calc(runDirs, nproc=None, gamma=True,
 if __name__ == '__main__':
     WaveCars = ['./run/%03d/WAVECAR' % (ii + 1) for ii in range(10)]
 
-    parallel_nac_calc(WaveCars)
+    parallel_nac_calc(WaveCars, bmin=325, bmax=340)
 
