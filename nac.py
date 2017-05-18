@@ -46,26 +46,31 @@ def nac_from_vaspwfc(waveA, waveB, gamma=True,
     nacType = np.float if gamma else np.complex
     nacs = np.zeros((nbasis, nbasis), dtype=nacType)
 
-    # from time import time
+    from time import time
+    t1 = time()
     for ii in range(nbasis):
         for jj in range(ii):
-            # t1 = time()
             ib1 = ii + bmin
             ib2 = jj + bmin
 
+            # t1 = time()
             ci_t   = phi_i.readBandCoeff(ispin, ikpt, ib1, norm=True)
             cj_t   = phi_i.readBandCoeff(ispin, ikpt, ib2, norm=True)
 
             ci_tdt = phi_j.readBandCoeff(ispin, ikpt, ib1, norm=True)
             cj_tdt = phi_j.readBandCoeff(ispin, ikpt, ib2, norm=True)
+            # t2 = time()
+            # print '1. Elapsed Time: %.4f [s]' % (t2 - t1)
 
             tmp = np.sum(ci_t.conj() * cj_tdt) - np.sum(cj_t.conj() * ci_tdt)
+            # t3 = time()
+            # print '2. Elapsed Time: %.4f [s]' % (t3 - t2)
 
             nacs[ii,jj] = tmp.real if gamma else tmp
             nacs[jj,ii] = -nacs[ii,jj]
 
-            # t2 = time()
-            # print 'Elapsed Time: %.4f [s]' % (t2 - t1)
+    t2 = time()
+    print '1. Elapsed Time: %.4f [s]' % (t2 - t1)
 
     # EnT = (phi_i._bands[ispin-1,ikpt-1,:] + phi_j._bands[ispin-1,ikpt-1,:]) / 2.
     EnT = phi_i._bands[ispin-1,ikpt-1,:]
