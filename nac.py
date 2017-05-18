@@ -26,7 +26,7 @@ def nac_from_vaspwfc(waveA, waveB, gamma=True,
         ispin:  spin index, 1 or 2
 
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    !!!! Note, this method is way too slow than fortran code !!!!
+    !!!! Note, this method is much slower than fortran code. !!!!
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     '''
