@@ -98,10 +98,13 @@ performed with `VASP` and the input files can be found in the
         K_in_sup.append(kg)
     # remove the duplicate K-points
     reducedK = removeDuplicateKpoints(K_in_sup)
+
+    # save to VASP KPOINTS
+    save2VaspKPOINTS(reducedK)
     ```
 3. Do one non-SCF calculation of the supercell using the folded K-points and
    obtain the corresponding pseudo-wavefunction. The input files are in
-   `examples/unfold/sup_3x3x1/unfold`. The effective band structure (EBS) and
+   `examples/unfold/sup_3x3x1/`. The effective band structure (EBS) and
    then be obtained by processing the WAVECAR file.
 
    ```python
