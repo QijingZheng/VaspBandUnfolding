@@ -83,10 +83,10 @@ class vaspwfc():
 
         # Minimum FFT grid size
         Anorm = np.linalg.norm(self._Acell, axis=1)
-        CUTOF = np.array(
-                sqrt(self._encut / RYTOEV) / (TPI / (Anorm / AUTOA)), dtype=int
+        CUTOF = np.ceil(
+                sqrt(self._encut / RYTOEV) / (TPI / (Anorm / AUTOA))
         )
-        self._ngrid = 2 * CUTOF + 1
+        self._ngrid = np.array(2 * CUTOF + 1, dtype=int)
         
     def setWFPrec(self):
         '''
