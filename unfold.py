@@ -109,6 +109,7 @@ def EBS_scatter(kpts, cell, spectral_weight,
     '''
 
     import matplotlib as mpl
+    mpl.use('agg')
     import matplotlib.pyplot as plt
 
     mpl.rcParams['axes.unicode_minus'] = False
@@ -163,6 +164,7 @@ def EBS_cmaps(kpts, cell, E0, spectral_function,
     '''
 
     import matplotlib as mpl
+    mpl.use('agg')
     import matplotlib.pyplot as plt
 
     mpl.rcParams['axes.unicode_minus'] = False
