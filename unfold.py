@@ -285,6 +285,11 @@ class unfold():
                     np.abs(self.wfc._kvecs[ii] - K0) < 1E-5
                ):
                 return ii + 1
+        # the for-else
+        else:
+            raise ValueError(
+                    'Cannot find the corresponding K-points in WAVECAR!' 
+                    )
 
     def spectral_weight_k(self, k0):
         '''
