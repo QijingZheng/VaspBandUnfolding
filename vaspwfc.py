@@ -350,7 +350,39 @@ class vaspwfc():
         tdm = 1j / (dE / (2*RYTOEV)) * tdm * AUTOA * AUTDEBYE
 
         return dE, ovlap, tdm
-        
+
+    def inverse_participation_ratio(self, norm=True, gamma=False):
+        '''
+        Calculate Inverse Paticipation Ratio (IPR) from the wavefunction. IPR is
+        a measure of the localization of Kohn-Sham states. For a particular KS
+        state \phi_j, it is defined as
+            
+                          \sum_n |\phi_j(n)|^4 
+            IPR(\phi_j) = ---------------------
+                          \sum_n |\phi_j(n)|^2 
+
+        where n iters over the number of grid points.
+        '''
+
+        self.ipr = np.zeros((self._nspin, self._nkpts, self._nbands, 3))
+
+        for ispin in range(self._nspin):
+            for ikpt in range(self._nkpts):
+                for iband in range(self._nbands):
+                    phi_j = self.wfc_r(ispin+1, ikpt+1, iband+1,
+                                       norm=norm,
+                                       gamma=gamma
+                                       )
+                    phi_j_abs = np.abs(phi_j)
+
+                    print 'Calculating IPR of #spin %4d, #kpt %4d, #band %4d' % (ispin+1, ikpt+1, iband+1)
+                    self.ipr[ispin, ikpt, iband, 0] = self._kpath[ikpt]
+                    self.ipr[ispin, ikpt, iband, 1] = self._bands[ispin, ikpt, iband]
+                    self.ipr[ispin, ikpt, iband, 2] = np.sum(phi_j_abs**4) / np.sum(phi_j_abs**2)
+
+        np.save('ipr.npy', self.ipr)
+        return self.ipr
+
 ############################################################
 
 if __name__ == '__main__':
@@ -363,9 +395,9 @@ if __name__ == '__main__':
     #                gamma=True)
     # xx.save2vesta(phi, poscar='./gamma/POSCAR',gamma=True)
 
-    xx = vaspwfc('WAVECAR')
-    dE, ovlap, tdm = xx.TransitionDipoleMoment([1,30,17], [1,30,18], norm=True)
-    print dE, ovlap.real, np.abs(tdm)**2
+    # xx = vaspwfc('WAVECAR')
+    # dE, ovlap, tdm = xx.TransitionDipoleMoment([1,30,17], [1,30,18], norm=True)
+    # print dE, ovlap.real, np.abs(tdm)**2
 
     # print xx._recl, xx._nspin, xx._rtag
     # print xx._nkpts, xx._nbands, xx._encut
@@ -407,4 +439,18 @@ if __name__ == '__main__':
     #                 if nwrite % 10 == 0:
     #                     out.write('\n')
 
+    xx = vaspwfc('wave_tyz')
+    ipr = xx.inverse_participation_ratio()
+    print xx._nbands, xx._nkpts
+
+    import matplotlib as mpl
+    import matplotlib.pyplot as plt
+
+    fig = plt.figure()
+    ax = plt.subplot()
+
+    ax.scatter(ipr[...,0], ipr[..., 1], s=ipr[..., 2] / ipr[..., 2].max() * 10, c=ipr[..., 2], 
+               cmap='jet_r')
+
+    plt.show()
     pass
