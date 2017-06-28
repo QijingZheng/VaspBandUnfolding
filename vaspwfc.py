@@ -357,9 +357,9 @@ class vaspwfc():
         a measure of the localization of Kohn-Sham states. For a particular KS
         state \phi_j, it is defined as
             
-                          \sum_n |\phi_j(n)|^4 
-            IPR(\phi_j) = ---------------------
-                          \sum_n |\phi_j(n)|^2 
+                            \sum_n |\phi_j(n)|^4 
+            IPR(\phi_j) = -------------------------
+                          |\sum_n |\phi_j(n)|^2||^2
 
         where n iters over the number of grid points.
         '''
@@ -378,7 +378,7 @@ class vaspwfc():
                     print 'Calculating IPR of #spin %4d, #kpt %4d, #band %4d' % (ispin+1, ikpt+1, iband+1)
                     self.ipr[ispin, ikpt, iband, 0] = self._kpath[ikpt]
                     self.ipr[ispin, ikpt, iband, 1] = self._bands[ispin, ikpt, iband]
-                    self.ipr[ispin, ikpt, iband, 2] = np.sum(phi_j_abs**4) / np.sum(phi_j_abs**2)
+                    self.ipr[ispin, ikpt, iband, 2] = np.sum(phi_j_abs**4) / np.sum(phi_j_abs**2)**2
 
         np.save('ipr.npy', self.ipr)
         return self.ipr
