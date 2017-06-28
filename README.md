@@ -17,9 +17,11 @@ any two KS states can also be calculated.
 IPR is a measure of the localization of Kohn-Sham states. For a particular KS
 state \phi_j, it is defined as
 
+```latex
                 \sum_n |\phi_j(n)|^4 
 IPR(\phi_j) = -------------------------
               |\sum_n |\phi_j(n)|^2||^2
+```
 
 where n iters over the number of grid points.
 
