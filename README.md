@@ -13,6 +13,16 @@ pseudo-wavefunction,
 [transition dipole moment](https://en.wikipedia.org/wiki/Transition_dipole_moment) between
 any two KS states can also be calculated.
 
+## Inverse Participation Ratio
+IPR is a measure of the localization of Kohn-Sham states. For a particular KS
+state \phi_j, it is defined as
+
+                \sum_n |\phi_j(n)|^4 
+IPR(\phi_j) = -------------------------
+              |\sum_n |\phi_j(n)|^2||^2
+
+where n iters over the number of grid points.
+
 ## Band unfolding
 
 Using the pseudo-wavefunction from supercell calculation, it is possible to
