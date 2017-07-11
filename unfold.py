@@ -129,11 +129,13 @@ def EBS_scatter(kpts, cell, spectral_weight,
     fig.set_size_inches(figsize)
     if nspin == 1:
         axes = [plt.subplot(111)]
+        fig.set_size_inches(figsize)
     else:
         axes = [plt.subplot(121), plt.subplot(122)]
+        fig.set_size_inches((figsize[0] * 2, figsize[1]))
 
     for ispin in range(nspin):
-        ax = axes[ii]
+        ax = axes[ispin]
         for ik in range(nk):
             ax.scatter(kdist[ik] * x0,
                        spectral_weight[ispin,ik,:,0] - eref,
@@ -187,16 +189,18 @@ def EBS_cmaps(kpts, cell, E0, spectral_function,
     # ymin, ymax = E0.min() - eref, E0.max() - eref
 
     fig = plt.figure()
-    fig.set_size_inches(figsize)
     if nspin == 1:
         axes = [plt.subplot(111)]
+        fig.set_size_inches(figsize)
     else:
         axes = [plt.subplot(121), plt.subplot(122)]
+        fig.set_size_inches((figsize[0] * 2, figsize[1]))
 
     # ax.imshow(spectral_function, extent=(xmin, xmax, ymin, ymax), 
     #           origin='lower', aspect='auto', cmap=cmap)
     X, Y = np.meshgrid(kdist, E0 - eref)
     for ispin in range(nspin):
+        ax = axes[ispin]
         ax.contourf(X, Y, spectral_function[ispin], cmap=cmap)
 
         ax.set_xlim(xmin, xmax)
@@ -394,12 +398,14 @@ class unfold():
         #                     for ik in range(NKPTS)], dtype=float)
         sw = []
         for ispin in range(self.wfc._nspin):
-            print "#" * 40
-            print "Calculating spin component: %d" % ispin
-            print "#" * 40
+            if self.wfc._nspin == 2:
+                print "#" * 60
+                print "Spin component: %d" % ispin
+                print "#" * 60
             sw.append([self.spectral_weight_k(kpoints[ik], whichspin=ispin+1)
                        for ik in range(NKPTS)])
 
+        self.SW = np.array(sw)
         return self.SW
 
     def spectral_function(self, nedos=4000, sigma=0.02):
