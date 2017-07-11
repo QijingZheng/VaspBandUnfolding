@@ -147,9 +147,9 @@ def EBS_scatter(kpts, cell, spectral_weight,
         ax.set_ylim(*ylim)
         ax.set_ylabel('Energy [eV]', labelpad=5)
 
-    if nseg:
-        for kb in kdist[::nseg]:
-            ax.axvline(x=kb, lw=0.5, color='k')
+        if nseg:
+            for kb in kdist[::nseg]:
+                ax.axvline(x=kb, lw=0.5, color='k')
 
     plt.tight_layout(pad=0.2)
     plt.savefig(save, dpi=360)
@@ -207,9 +207,9 @@ def EBS_cmaps(kpts, cell, E0, spectral_function,
         ax.set_ylim(*ylim)
         ax.set_ylabel('Energy [eV]', labelpad=5)
 
-    if nseg:
-        for kb in kdist[::nseg]:
-            ax.axvline(x=kb, lw=0.5, color='k')
+        if nseg:
+            for kb in kdist[::nseg]:
+                ax.axvline(x=kb, lw=0.5, color='k')
 
     plt.tight_layout(pad=0.2)
     plt.savefig(save, dpi=360)
