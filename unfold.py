@@ -114,6 +114,7 @@ def EBS_scatter(kpts, cell, spectral_weight,
 
     mpl.rcParams['axes.unicode_minus'] = False
 
+    nspin = spectral_weight.shape[0]
     kpt_c = np.dot(kpts, np.linalg.inv(cell).T)
     kdist = np.r_[0, np.cumsum(
                             np.linalg.norm(
@@ -121,23 +122,28 @@ def EBS_scatter(kpts, cell, spectral_weight,
                                 axis=1
                             ))]
     nk = kdist.size
-    nb = spectral_weight.shape[1]
+    nb = spectral_weight.shape[2]
     x0 = np.ones(nb)
 
     fig = plt.figure()
     fig.set_size_inches(figsize)
-    ax = plt.subplot(111)
+    if nspin == 1:
+        axes = [plt.subplot(111)]
+    else:
+        axes = [plt.subplot(121), plt.subplot(122)]
 
-    for ik in range(nk):
-        ax.scatter(kdist[ik] * x0,
-                   spectral_weight[ik,:,0] - eref,
-                   s=spectral_weight[ik,:,1] * factor,
-                   lw=0.0,
-                   color=color)
+    for ispin in range(nspin):
+        ax = axes[ii]
+        for ik in range(nk):
+            ax.scatter(kdist[ik] * x0,
+                       spectral_weight[ispin,ik,:,0] - eref,
+                       s=spectral_weight[ispin,ik,:,1] * factor,
+                       lw=0.0,
+                       color=color)
 
-    ax.set_xlim(0, kdist.max())
-    ax.set_ylim(*ylim)
-    ax.set_ylabel('Energy [eV]', labelpad=5)
+        ax.set_xlim(0, kdist.max())
+        ax.set_ylim(*ylim)
+        ax.set_ylabel('Energy [eV]', labelpad=5)
 
     if nseg:
         for kb in kdist[::nseg]:
@@ -169,6 +175,7 @@ def EBS_cmaps(kpts, cell, E0, spectral_function,
 
     mpl.rcParams['axes.unicode_minus'] = False
 
+    nspin = spectral_function.shape[0]
     kpt_c = np.dot(kpts, np.linalg.inv(cell).T)
     kdist = np.r_[0, np.cumsum(
                             np.linalg.norm(
@@ -181,16 +188,20 @@ def EBS_cmaps(kpts, cell, E0, spectral_function,
 
     fig = plt.figure()
     fig.set_size_inches(figsize)
-    ax = plt.subplot(111)
+    if nspin == 1:
+        axes = [plt.subplot(111)]
+    else:
+        axes = [plt.subplot(121), plt.subplot(122)]
 
     # ax.imshow(spectral_function, extent=(xmin, xmax, ymin, ymax), 
     #           origin='lower', aspect='auto', cmap=cmap)
     X, Y = np.meshgrid(kdist, E0 - eref)
-    ax.contourf(X, Y, spectral_function, cmap=cmap)
+    for ispin in range(nspin):
+        ax.contourf(X, Y, spectral_function[ispin], cmap=cmap)
 
-    ax.set_xlim(xmin, xmax)
-    ax.set_ylim(*ylim)
-    ax.set_ylabel('Energy [eV]', labelpad=5)
+        ax.set_xlim(xmin, xmax)
+        ax.set_ylim(*ylim)
+        ax.set_ylabel('Energy [eV]', labelpad=5)
 
     if nseg:
         for kb in kdist[::nseg]:
@@ -293,7 +304,7 @@ class unfold():
                     'Cannot find the corresponding K-points in WAVECAR!' 
                     )
 
-    def spectral_weight_k(self, k0):
+    def spectral_weight_k(self, k0, whichspin=1):
         '''
         Spectral weight for a given k:
 
@@ -337,9 +348,9 @@ class unfold():
 
             # pad the coefficients to 3D grid
             wfc_k_3D[GallIndex[:,0], GallIndex[:,1], GallIndex[:,2]] = \
-                    self.wfc.readBandCoeff(ispin=1, ikpt=ikpt, iband=nb + 1, norm=True)
+                    self.wfc.readBandCoeff(ispin=whichspin, ikpt=ikpt, iband=nb + 1, norm=True)
             # energy
-            E_Km[nb] = self.bands[0,ikpt-1,nb]
+            E_Km[nb] = self.bands[whichspin-1,ikpt-1,nb]
             # spectral weight 
             P_Km[nb] = np.linalg.norm(
                         wfc_k_3D[GoffsetIndex[:,0], GoffsetIndex[:,1], GoffsetIndex[:,2]]
@@ -379,8 +390,15 @@ class unfold():
 
         NKPTS = len(kpoints)
 
-        self.SW = np.array([self.spectral_weight_k(kpoints[ik])
-                            for ik in range(NKPTS)], dtype=float)
+        # self.SW = np.array([self.spectral_weight_k(kpoints[ik])
+        #                     for ik in range(NKPTS)], dtype=float)
+        sw = []
+        for ispin in range(self.wfc._nspin):
+            print "#" * 40
+            print "Calculating spin component: %d" % ispin
+            print "#" * 40
+            sw.append([self.spectral_weight_k(kpoints[ik], whichspin=ispin+1)
+                       for ik in range(NKPTS)])
 
         return self.SW
 
@@ -397,24 +415,25 @@ class unfold():
         assert self.SW is not None, 'Spectral weight must be calculated first!'
 
         # Number of kpoints
-        nk = self.SW.shape[0]
+        nk = self.SW.shape[1]
         # spectral function
-        SF = np.zeros((nedos, nk), dtype=float)
+        SF = np.zeros((self.wfc._nspin, nedos, nk), dtype=float)
 
-        emin = self.SW[:,:,0].min()
-        emax = self.SW[:,:,0].max()
+        emin = self.SW[:,:,:,0].min()
+        emax = self.SW[:,:,:,0].max()
         e0 = np.linspace(emin - 5 * sigma, emax + 5 * sigma, nedos)
 
-        for ii in range(nk):
-            E_Km = self.SW[ii,:,0]
-            P_Km = self.SW[ii,:,1]
+        for ispin in range(self.wfc._nspin):
+            for ii in range(nk):
+                E_Km = self.SW[ispin,ii,:,0]
+                P_Km = self.SW[ispin,ii,:,1]
 
-            SF[:,ii] = np.sum(
-                        LorentzSmearing(
-                            e0[:,np.newaxis], E_Km[np.newaxis,:],
-                            sigma=sigma
-                        ) * P_Km[np.newaxis,:], axis=1
-                    )
+                SF[ispin,:,ii] = np.sum(
+                            LorentzSmearing(
+                                e0[:,np.newaxis], E_Km[np.newaxis,:],
+                                sigma=sigma
+                            ) * P_Km[np.newaxis,:], axis=1
+                        )
         return e0, SF
 
 ############################################################
