@@ -73,13 +73,14 @@ def nac_from_vaspwfc(waveA, waveB, gamma=True,
     print '1. Elapsed Time: %.4f [s]' % (t2 - t1)
 
     # EnT = (phi_i._bands[ispin-1,ikpt-1,:] + phi_j._bands[ispin-1,ikpt-1,:]) / 2.
-    EnT = phi_i._bands[ispin-1,ikpt-1,:]
+    EnT = phi_i._bands[ispin-1,ikpt-1,bmin-1:bmax]
 
     # close the wavecar
     phi_i._wfc.close()
     phi_j._wfc.close()
 
-    return EnT, nacs / (2 * dt)
+    # return EnT, nacs / (2 * dt)
+    return EnT, nacs
 
 
 def parallel_nac_calc(runDirs, nproc=None, gamma=True,
@@ -103,8 +104,8 @@ def parallel_nac_calc(runDirs, nproc=None, gamma=True,
 
         prefix = os.path.dirname(runDirs[ii])
 
-        np.save(prefix + '/eig.npy', et)
-        np.save(prefix + '/nac.npy', nc)
+        np.savetxt(prefix + '/eig.txt', et[np.newaxis, :])
+        np.savetxt(prefix + '/nac.txt', nc.flatten()[np.newaxis, :])
 
 
 ############################################################
@@ -112,7 +113,10 @@ def parallel_nac_calc(runDirs, nproc=None, gamma=True,
 ############################################################
 
 if __name__ == '__main__':
-    WaveCars = ['./run/%03d/WAVECAR' % (ii + 1) for ii in range(10)]
+    T_start = 1
+    T_end   = 10
+
+    WaveCars = ['./run/%03d/WAVECAR' % (ii + 1) for ii in range(T_start-1, T_end)]
 
     parallel_nac_calc(WaveCars, bmin=325, bmax=340)
 
