@@ -57,7 +57,7 @@ class vaspwfc():
 
     def isSocWfc(self):
         """
-        Is the WAVECAR from a SOC calculation?
+        Is the WAVECAR from an SOC calculation?
         """
         return True if self._lsoc else False
 
