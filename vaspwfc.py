@@ -38,12 +38,13 @@ class vaspwfc():
         End loop over spin
     '''
 
-    def __init__(self, fnm='WAVECAR'):
+    def __init__(self, fnm='WAVECAR', lsorbit=False):
         '''
         Initialization.
         '''
 
         self._fname = fnm
+        self._lsoc  = lsorbit
         try:
             self._wfc = open(self._fname, 'rb')
         except:
@@ -53,6 +54,12 @@ class vaspwfc():
         self.readWFHeader()
         # read the band information
         self.readWFBand()
+
+    def isSocWfc(self):
+        """
+        Is the WAVECAR from a SOC calculation?
+        """
+        return True if self._lsoc else False
 
     def readWFHeader(self):
         '''
@@ -178,8 +185,14 @@ class vaspwfc():
         # find Gvectors where (G + k)**2 / 2 < ENCUT
         Gvec = kgrid[np.where(KENERGY < self._encut)[0]]
 
-        assert Gvec.shape[0] == self._nplws[ikpt - 1], 'No. of planewaves not consistent! %d %d %d' % \
-                (Gvec.shape[0], self._nplws[ikpt -1], np.prod(self._ngrid))
+        if self._lsoc:
+                assert Gvec.shape[0] == self._nplws[ikpt - 1] / 2, \
+                       'No. of planewaves not consistent for an SOC WAVECAR! %d %d %d' % \
+                       (Gvec.shape[0], self._nplws[ikpt -1], np.prod(self._ngrid))
+        else:
+            assert Gvec.shape[0] == self._nplws[ikpt - 1], 'No. of planewaves not consistent! %d %d %d' % \
+                    (Gvec.shape[0], self._nplws[ikpt -1], np.prod(self._ngrid))
+
         return np.asarray(Gvec, dtype=int)
 
     def save2vesta(self, phi=None, poscar='POSCAR', prefix='wfc', gamma=False):
