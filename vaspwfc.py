@@ -38,13 +38,14 @@ class vaspwfc():
         End loop over spin
     '''
 
-    def __init__(self, fnm='WAVECAR', lsorbit=False):
+    def __init__(self, fnm='WAVECAR', lsorbit=False, lgamma=False):
         '''
         Initialization.
         '''
 
         self._fname = fnm
         self._lsoc  = lsorbit
+        self._lgam  = lgamma
         try:
             self._wfc = open(self._fname, 'rb')
         except:
@@ -143,7 +144,7 @@ class vaspwfc():
             self._kpath = None
         return  self._kpath, self._bands
 
-    def gvectors(self, ikpt=1, gamma=False):
+    def gvectors(self, ikpt=1):
         '''
         Generate the G-vectors that satisfies the following relation
             (G + k)**2 / 2 < ENCUT
@@ -159,7 +160,7 @@ class vaspwfc():
                 for jj in range(self._ngrid[1])]
         fz = [kk if kk < self._ngrid[2] / 2 + 1 else kk - self._ngrid[2]
                 for kk in range(self._ngrid[2])]
-        if gamma:
+        if self._lgam:
             # parallel gamma version of VASP WAVECAR exclude some planewave
             # components, -DwNGZHalf
             kgrid = np.array([(fx[ii], fy[jj], fz[kk])
@@ -195,7 +196,7 @@ class vaspwfc():
 
         return np.asarray(Gvec, dtype=int)
 
-    def save2vesta(self, phi=None, poscar='POSCAR', prefix='wfc', gamma=False):
+    def save2vesta(self, phi=None, poscar='POSCAR', prefix='wfc'):
         '''
         Save the real space pseudo-wavefunction as vesta format.
         '''
@@ -222,7 +223,7 @@ class vaspwfc():
                         out.write('%16.8E ' % phi.real[ii,jj,kk])
                         if nwrite % 10 == 0:
                             out.write('\n')
-        if not gamma:
+        if not self._lgam:
             with open(prefix + '_i.vasp', 'w') as out:
                 out.write(head)
                 nwrite=0
@@ -235,8 +236,7 @@ class vaspwfc():
                                 out.write('\n')
 
     def wfc_r(self, ispin=1, ikpt=1, iband=1,
-                    gvec=None, ngrid=None, norm=False,
-                    gamma=False):
+                    gvec=None, ngrid=None, norm=False):
         '''
         Obtain the pseudo-wavefunction of the specified KS states in real space
         by performing FT transform on the reciprocal space planewave
@@ -255,9 +255,9 @@ class vaspwfc():
                     "Minium FT grid size: (%d, %d, %d)" % \
                     (self._ngrid[0], self._ngrid[1], self._ngrid[2])
         if gvec is None:
-            gvec = self.gvectors(ikpt, gamma)
+            gvec = self.gvectors(ikpt)
 
-        if gamma:
+        if self._lgam:
             phi_k = np.zeros((ngrid[0], ngrid[1], ngrid[2]/2 + 1), dtype=np.complex128)
         else:
             phi_k = np.zeros(ngrid, dtype=np.complex128)
@@ -265,7 +265,7 @@ class vaspwfc():
         gvec %= ngrid[np.newaxis,:]
         phi_k[gvec[:,0], gvec[:,1], gvec[:,2]] = self.readBandCoeff(ispin, ikpt, iband, norm)
 
-        if gamma:
+        if self._lgam:
             # add some components that are excluded and perform c2r FFT
             for ii in range(ngrid[0]):
                 for jj in range(ngrid[1]):
@@ -319,7 +319,7 @@ class vaspwfc():
         assert 1 <= ikpt  <= self._nkpts,  'Invalid kpoint index!'
         assert 1 <= iband <= self._nbands, 'Invalid band index!'
 
-    def TransitionDipoleMoment(self, ks_i, ks_j, norm=False, gamma=False):
+    def TransitionDipoleMoment(self, ks_i, ks_j, norm=False):
         '''
         calculate Transition Dipole Moment between two KS states.
         TDM in momentum representation
@@ -343,7 +343,7 @@ class vaspwfc():
         self.checkIndex(*ks_j)
 
         # according to the above equation, G = 0 does NOT contribute to TDM.
-        gvec = np.dot(self.gvectors(ikpt=ks_i[1], gamma=gamma), self._Bcell*TPI)
+        gvec = np.dot(self.gvectors(ikpt=ks_i[1]), self._Bcell*TPI)
         # planewave coefficients of the two states
         phi_i = self.readBandCoeff(*ks_i, norm=norm)
         phi_j = self.readBandCoeff(*ks_j, norm=norm)
@@ -353,7 +353,7 @@ class vaspwfc():
 
         tmp1 = phi_i.conjugate() * phi_j
         ovlap = np.sum(tmp1)
-        if gamma:
+        if self._lgam:
             tmp2 = phi_i * phi_j.conjugate()
             tdm = (np.sum(tmp1[:,np.newaxis] * gvec, axis=0) -
                    np.sum(tmp2[:,np.newaxis] * gvec, axis=0)) / 2.
@@ -364,7 +364,7 @@ class vaspwfc():
 
         return dE, ovlap, tdm
 
-    def inverse_participation_ratio(self, norm=True, gamma=False):
+    def inverse_participation_ratio(self, norm=True):
         '''
         Calculate Inverse Paticipation Ratio (IPR) from the wavefunction. IPR is
         a measure of the localization of Kohn-Sham states. For a particular KS
@@ -383,8 +383,7 @@ class vaspwfc():
             for ikpt in range(self._nkpts):
                 for iband in range(self._nbands):
                     phi_j = self.wfc_r(ispin+1, ikpt+1, iband+1,
-                                       norm=norm,
-                                       gamma=gamma)
+                                       norm=norm)
                     phi_j_abs = np.abs(phi_j)
 
                     print 'Calculating IPR of #spin %4d, #kpt %4d, #band %4d' % (ispin+1, ikpt+1, iband+1)

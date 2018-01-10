@@ -227,7 +227,7 @@ class unfold():
     Phys. Rev. B 85, 085201 (2012)
     '''
 
-    def __init__(self, M=None, wavecar='WAVECAR'):
+    def __init__(self, M=None, wavecar='WAVECAR', gamma=False):
         '''
         Initialization.
 
@@ -248,10 +248,13 @@ class unfold():
         wavefunction information of a supercell calculation.
         '''
 
+        # Whether the WAVECAR is a gamma-only version
+        self.gamma = gamma
+
         self.M = np.array(M, dtype=float)
         assert self.M.shape == (3,3), 'Shape of the tranformation matrix must be (3,3)'
 
-        self.wfc = vaspwfc(wavecar)
+        self.wfc = vaspwfc(wavecar, lgamma=self.gamma)
         # all the K-point vectors
         self.kvecs = self.wfc._kvecs
         # all the KS energies
@@ -276,6 +279,16 @@ class unfold():
         # Reciprocal space vectors of the supercell in fractional unit
         Gvecs = self.wfc.gvectors(ikpt=ikpt)
         # Gvecs = self.allGvecs[ikpt - 1]
+
+        if self.gamma:
+            nplw = Gvecs.shape[0]
+            tmp  = np.zeros((nplw * 2 - 1, 3), dtype=int)
+            # the gvectors of Gamma version only contains half the number of a
+            # normal version. 
+            tmp[:nplw,...] = Gvecs
+            tmp[nplw:,...] = -Gvecs[1:,...]            # G' = -G
+
+            Gvecs = tmp
 
         # Shape of Gvecs: (nplws, 3)
         # iGvecs = np.arange(Gvecs.shape[0], dtype=int)
@@ -351,8 +364,18 @@ class unfold():
             # wfc_k_3D[:,:,:] = 0.0
 
             # pad the coefficients to 3D grid
-            wfc_k_3D[GallIndex[:,0], GallIndex[:,1], GallIndex[:,2]] = \
-                    self.wfc.readBandCoeff(ispin=whichspin, ikpt=ikpt, iband=nb + 1, norm=True)
+            band_coeff = self.wfc.readBandCoeff(ispin=whichspin, ikpt=ikpt, iband=nb + 1, norm=True)
+            if self.gamma:
+                nplw = band_coeff.size
+                tmp  = np.zeros((nplw * 2 - 1), dtype=band_coeff.dtype)
+                # for Gamma version, the coefficients corresponding to G \ne 0
+                # is multiplied by a factor of sqrt(2)
+                band_coeff[1:] /= np.sqrt(2.)
+                tmp[:nplw] = band_coeff
+                tmp[nplw:] = band_coeff[1:].conj()
+                band_coeff = tmp
+
+            wfc_k_3D[GallIndex[:,0], GallIndex[:,1], GallIndex[:,2]] = band_coeff
             # energy
             E_Km[nb] = self.bands[whichspin-1,ikpt-1,nb]
             # spectral weight 
