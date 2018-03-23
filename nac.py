@@ -67,7 +67,10 @@ def nac_from_vaspwfc(waveA, waveB, gamma=True,
             # print '2. Elapsed Time: %.4f [s]' % (t3 - t2)
 
             nacs[ii,jj] = tmp.real if gamma else tmp
-            nacs[jj,ii] = -nacs[ii,jj]
+            if gamma:
+                nacs[jj,ii] = -nacs[ii,jj]
+            else:
+                nacs[jj,ii] = -np.conj(nacs[ii,jj])
 
     t2 = time()
     print '1. Elapsed Time: %.4f [s]' % (t2 - t1)
