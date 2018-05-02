@@ -46,6 +46,9 @@ class vaspwfc():
         self._fname = fnm
         self._lsoc  = lsorbit
         self._lgam  = lgamma
+
+        assert not (lsorbit and lgamma), 'The two settings conflict!'
+
         try:
             self._wfc = open(self._fname, 'rb')
         except:
