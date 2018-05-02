@@ -227,7 +227,7 @@ class unfold():
     Phys. Rev. B 85, 085201 (2012)
     '''
 
-    def __init__(self, M=None, wavecar='WAVECAR', gamma=False):
+    def __init__(self, M=None, wavecar='WAVECAR', gamma=False, lsorbit=False):
         '''
         Initialization.
 
@@ -249,12 +249,13 @@ class unfold():
         '''
 
         # Whether the WAVECAR is a gamma-only version
-        self.gamma = gamma
+        self._lgam = gamma
+        self._lsoc = lsorbit
 
         self.M = np.array(M, dtype=float)
         assert self.M.shape == (3,3), 'Shape of the tranformation matrix must be (3,3)'
 
-        self.wfc = vaspwfc(wavecar, lgamma=self.gamma)
+        self.wfc = vaspwfc(wavecar, lsorbit=self._lsoc, lgamma=self._lgam)
         # all the K-point vectors
         self.kvecs = self.wfc._kvecs
         # all the KS energies
@@ -280,7 +281,7 @@ class unfold():
         Gvecs = self.wfc.gvectors(ikpt=ikpt)
         # Gvecs = self.allGvecs[ikpt - 1]
 
-        if self.gamma:
+        if self._lgam:
             nplw = Gvecs.shape[0]
             tmp  = np.zeros((nplw * 2 - 1, 3), dtype=int)
             # the gvectors of Gamma version only contains half the number of a
@@ -354,34 +355,58 @@ class unfold():
         # 3d grid for planewave coefficients
         wfc_k_3D = np.zeros(self.wfc._ngrid, dtype=np.complex)
 
-        # the weights and corresponding energies
-        P_Km = np.zeros(self.wfc._nbands, dtype=float)
-        E_Km = np.zeros(self.wfc._nbands, dtype=float)
+        if self._lsoc:
+            # the weights and corresponding energies
+            P_Km = np.zeros((2, self.wfc._nbands), dtype=float)
+            E_Km = np.zeros((2, self.wfc._nbands), dtype=float)
+        else:
+            # the weights and corresponding energies
+            P_Km = np.zeros(self.wfc._nbands, dtype=float)
+            E_Km = np.zeros(self.wfc._nbands, dtype=float)
 
         for nb in range(self.wfc._nbands):
             # initialize the array to zero, which is unnecessary since the
             # GallIndex is the same for the same K-point
             # wfc_k_3D[:,:,:] = 0.0
 
-            # pad the coefficients to 3D grid
-            band_coeff = self.wfc.readBandCoeff(ispin=whichspin, ikpt=ikpt, iband=nb + 1, norm=True)
-            if self.gamma:
-                nplw = band_coeff.size
-                tmp  = np.zeros((nplw * 2 - 1), dtype=band_coeff.dtype)
-                # for Gamma version, the coefficients corresponding to G \ne 0
-                # is multiplied by a factor of sqrt(2)
-                band_coeff[1:] /= np.sqrt(2.)
-                tmp[:nplw] = band_coeff
-                tmp[nplw:] = band_coeff[1:].conj()
-                band_coeff = tmp
+            if self._lsoc:
+                # pad the coefficients to 3D grid
+                band_coeff = self.wfc.readBandCoeff(ispin=whichspin, ikpt=ikpt,
+                                                    iband=nb + 1, norm=False)
+                nplw = band_coeff.shape[0] / 2
+                band_spinor_coeff = [band_coeff[:nplw], band_coeff[nplw:]]
 
-            wfc_k_3D[GallIndex[:,0], GallIndex[:,1], GallIndex[:,2]] = band_coeff
-            # energy
-            E_Km[nb] = self.bands[whichspin-1,ikpt-1,nb]
-            # spectral weight 
-            P_Km[nb] = np.linalg.norm(
-                        wfc_k_3D[GoffsetIndex[:,0], GoffsetIndex[:,1], GoffsetIndex[:,2]]
-                    )**2
+                for Ispinor in range(2):
+                    band = band_spinor_coeff[Ispinor]
+                    band /= np.linalg.norm(band)
+                    wfc_k_3D[GallIndex[:,0], GallIndex[:,1], GallIndex[:,2]] = band
+
+                    # energy
+                    E_Km[Ispinor, nb] = self.bands[whichspin-1,ikpt-1,nb]
+                    # spectral weight 
+                    P_Km[Ispinor, nb] = np.linalg.norm(
+                                wfc_k_3D[GoffsetIndex[:,0], GoffsetIndex[:,1], GoffsetIndex[:,2]]
+                            )**2
+            else:
+                # pad the coefficients to 3D grid
+                band_coeff = self.wfc.readBandCoeff(ispin=whichspin, ikpt=ikpt, iband=nb + 1, norm=True)
+                if self._lgam:
+                    nplw = band_coeff.size
+                    tmp  = np.zeros((nplw * 2 - 1), dtype=band_coeff.dtype)
+                    # for Gamma version, the coefficients corresponding to G \ne 0
+                    # is multiplied by a factor of sqrt(2)
+                    band_coeff[1:] /= np.sqrt(2.)
+                    tmp[:nplw] = band_coeff
+                    tmp[nplw:] = band_coeff[1:].conj()
+                    band_coeff = tmp
+
+                wfc_k_3D[GallIndex[:,0], GallIndex[:,1], GallIndex[:,2]] = band_coeff
+                # energy
+                E_Km[nb] = self.bands[whichspin-1,ikpt-1,nb]
+                # spectral weight 
+                P_Km[nb] = np.linalg.norm(
+                            wfc_k_3D[GoffsetIndex[:,0], GoffsetIndex[:,1], GoffsetIndex[:,2]]
+                        )**2
 
         return np.array((E_Km, P_Km), dtype=float).T
 
@@ -429,6 +454,9 @@ class unfold():
                        for ik in range(NKPTS)])
 
         self.SW = np.array(sw)
+        if self._lsoc:
+            self.SW = np.swapaxes(swlf.SW, 0, 1)
+
         return self.SW
 
     def spectral_function(self, nedos=4000, sigma=0.02):

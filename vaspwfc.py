@@ -58,6 +58,9 @@ class vaspwfc():
         self.readWFHeader()
         # read the band information
         self.readWFBand()
+        
+        if self._lsoc:
+            assert self._nspin == 1, "NSPIN = 1 for noncollinear version WAVECAR!"
 
     def isSocWfc(self):
         """
