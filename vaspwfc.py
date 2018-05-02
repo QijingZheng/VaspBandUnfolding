@@ -263,23 +263,41 @@ class vaspwfc():
             phi_k = np.zeros(ngrid, dtype=np.complex128)
 
         gvec %= ngrid[np.newaxis,:]
-        phi_k[gvec[:,0], gvec[:,1], gvec[:,2]] = self.readBandCoeff(ispin, ikpt, iband, norm)
+        
+        if self._lsoc:
+            wfc_spinor = []
+            dump = self.readBandCoeff(ispin, ikpt, iband, norm)
+            nplw = dump.shape[0] / 2
+            
+            # spinor up
+            phi_k[gvec[:,0], gvec[:,1], gvec[:,2]] = dump[:nplw]
+            wfc_spinor.append(ifftn(phi_k))
+            # spinor down
+            phi_k[:,:,:] = 0.0j
+            phi_k[gvec[:,0], gvec[:,1], gvec[:,2]] = dump[nplw:]
+            wfc_spinor.append(ifftn(phi_k))
 
-        if self._lgam:
-            # add some components that are excluded and perform c2r FFT
-            for ii in range(ngrid[0]):
-                for jj in range(ngrid[1]):
-                    fx = ii if ii < ngrid[0] / 2 + 1 else ii - ngrid[0]
-                    fy = ii if ii < ngrid[1] / 2 + 1 else ii - ngrid[1]
-                    if (fy > 0) or (fy == 0 and fx >= 0):
-                        continue
-                    phi_k[ii,jj,0] = phi_k[-ii,-jj,0].conjugate()
-            phi_k /= np.sqrt(2.)
-            phi_k[0,0,0] *= np.sqrt(2.)
-            return np.fft.irfftn(phi_k, s=ngrid)
+            del dump
+            return wfc_spinor
+            
         else:
-            # perform complex2complex FFT
-            return ifftn(phi_k)
+            phi_k[gvec[:,0], gvec[:,1], gvec[:,2]] = self.readBandCoeff(ispin, ikpt, iband, norm)
+
+            if self._lgam:
+                # add some components that are excluded and perform c2r FFT
+                for ii in range(ngrid[0]):
+                    for jj in range(ngrid[1]):
+                        fx = ii if ii < ngrid[0] / 2 + 1 else ii - ngrid[0]
+                        fy = ii if ii < ngrid[1] / 2 + 1 else ii - ngrid[1]
+                        if (fy > 0) or (fy == 0 and fx >= 0):
+                            continue
+                        phi_k[ii,jj,0] = phi_k[-ii,-jj,0].conjugate()
+                phi_k /= np.sqrt(2.)
+                phi_k[0,0,0] *= np.sqrt(2.)
+                return np.fft.irfftn(phi_k, s=ngrid)
+            else:
+                # perform complex2complex FFT
+                return ifftn(phi_k)
 
     def readBandCoeff(self, ispin=1, ikpt=1, iband=1, norm=False):
         '''
@@ -450,18 +468,27 @@ if __name__ == '__main__':
     #                 if nwrite % 10 == 0:
     #                     out.write('\n')
 
-    xx = vaspwfc('wave_tyz')
-    ipr = xx.inverse_participation_ratio()
-    print xx._nbands, xx._nkpts
+    # xx = vaspwfc('wave_tyz')
+    # ipr = xx.inverse_participation_ratio()
+    # print xx._nbands, xx._nkpts
+    #
+    # import matplotlib as mpl
+    # import matplotlib.pyplot as plt
+    #
+    # fig = plt.figure()
+    # ax = plt.subplot()
+    #
+    # ax.scatter(ipr[...,0], ipr[..., 1], s=ipr[..., 2] / ipr[..., 2].max() * 10, c=ipr[..., 2], 
+    #            cmap='jet_r')
+    #
+    # plt.show()
 
-    import matplotlib as mpl
-    import matplotlib.pyplot as plt
+    xx = vaspwfc('examples/wfc_r/wavecar_mose2-wse2', lsorbit=True)
+    phi_spinor = xx.wfc_r(1, 1, 36, ngrid=xx._ngrid*2)
+    for ii in range(2):
+        phi = phi_spinor[ii]
+        prefix = 'spinor_{:02d}'.format(ii)
+        xx.save2vesta(phi, prefix=prefix,
+                poscar='examples/wfc_r/poscar_mose2-wse2')
 
-    fig = plt.figure()
-    ax = plt.subplot()
-
-    ax.scatter(ipr[...,0], ipr[..., 1], s=ipr[..., 2] / ipr[..., 2].max() * 10, c=ipr[..., 2], 
-               cmap='jet_r')
-
-    plt.show()
     pass
