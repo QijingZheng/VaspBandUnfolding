@@ -64,6 +64,16 @@ phi = wav.wfc_r(ikpt=2, iband=27, ngrid=wav._ngrid * 2)
 # Save the orbital into files. Since the wavefunction consist of complex
 # numbers, the real and imaginary part are saved separately.
 wav.save2vesta(phi, poscar='./examples/wfc_r/POSCAR')
+
+# for WAVECAR from a noncollinear run, the wavefunction at each k-piont/band is
+# a two component spinor. Turn on the lsorbit flag when reading WAVECAr.
+xx = vaspwfc('examples/wfc_r/wavecar_mose2-wse2', lsorbit=True)
+phi_spinor = xx.wfc_r(1, 1, 36, ngrid=xx._ngrid*2)
+for ii in range(2):
+    phi = phi_spinor[ii]
+    prefix = 'spinor_{:02d}'.format(ii)
+    xx.save2vesta(phi, prefix=prefix,
+            poscar='examples/wfc_r/poscar_mose2-wse2')
 ```
 
 Below are the real (left) and imaginary (right) part of the selected KS orbital:
