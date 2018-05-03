@@ -455,7 +455,7 @@ class unfold():
 
         self.SW = np.array(sw)
         if self._lsoc:
-            self.SW = np.swapaxes(swlf.SW, 0, 1)
+            self.SW = np.swapaxes(self.SW, 0, 1)
 
         return self.SW
 
