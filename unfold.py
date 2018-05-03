@@ -471,16 +471,17 @@ class unfold():
 
         assert self.SW is not None, 'Spectral weight must be calculated first!'
 
+        NS = 2 if self._lsoc else self.wfc._nspin
         # Number of kpoints
         nk = self.SW.shape[1]
         # spectral function
-        SF = np.zeros((self.wfc._nspin, nedos, nk), dtype=float)
+        SF = np.zeros((NS, nedos, nk), dtype=float)
 
         emin = self.SW[:,:,:,0].min()
         emax = self.SW[:,:,:,0].max()
         e0 = np.linspace(emin - 5 * sigma, emax + 5 * sigma, nedos)
 
-        for ispin in range(self.wfc._nspin):
+        for ispin in range(NS):
             for ii in range(nk):
                 E_Km = self.SW[ispin,ii,:,0]
                 P_Km = self.SW[ispin,ii,:,1]
