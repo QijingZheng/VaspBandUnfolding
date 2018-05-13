@@ -16,7 +16,7 @@ def nac_from_vaspwfc(waveA, waveB, gamma=True,
     Calculate Nonadiabatic Couplings (NAC) from two WAVECARs
     <psi_i(t)| d/dt |(psi_j(t))> ~=~
                                     (<psi_i(t)|psi_j(t+dt)> -
-                                     <psi_j(t)|psi_i(t+dt)>) / (2dt)
+                                     <psi_i(t+dt)|psi_j(t)>) / (2dt)
     inputs:
         waveA:  path of WAVECAR A
         waveB:  path of WAVECAR B
@@ -62,7 +62,7 @@ def nac_from_vaspwfc(waveA, waveB, gamma=True,
             # t2 = time()
             # print '1. Elapsed Time: %.4f [s]' % (t2 - t1)
 
-            tmp = np.sum(ci_t.conj() * cj_tdt) - np.sum(cj_t.conj() * ci_tdt)
+            tmp = np.sum(ci_t.conj() * cj_tdt) - np.sum(ci_tdt.conj() * cj_t)
             # t3 = time()
             # print '2. Elapsed Time: %.4f [s]' % (t3 - t2)
 
