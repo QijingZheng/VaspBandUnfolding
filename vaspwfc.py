@@ -242,13 +242,27 @@ class vaspwfc():
                                 out.write('\n')
 
     def wfc_r(self, ispin=1, ikpt=1, iband=1,
-                    gvec=None, ngrid=None, norm=False):
+                    gvec=None, Cg=None, ngrid=None, norm=True):
         '''
         Obtain the pseudo-wavefunction of the specified KS states in real space
         by performing FT transform on the reciprocal space planewave
         coefficients.  The 3D FT grid size is determined by ngrid, which
         defaults to self._ngrid if not given.  Gvectors of the KS states is used
         to put 1D planewave coefficients back to 3D grid.
+
+        Inputs:
+            ispin : spin index of the desired KS states, starting from 1
+            ikpt  : k-point index of the desired KS states, starting from 1
+            iband : band index of the desired KS states, starting from 1
+            gvec  : the G-vectors correspond to the plane-wave coefficients
+            Cg    : the plane-wave coefficients. If None, read from WAVECAR
+            ngrid : the FFT grid size
+            norm  : normalized Cg?
+
+        The return wavefunctions are normalized so that
+
+                        \sum_{ijk} | \phi_{ijk} | ^ 2 = 1
+            
         '''
         self.checkIndex(ispin, ikpt, iband)
 
@@ -260,6 +274,11 @@ class vaspwfc():
             assert np.alltrue(ngrid >= self._ngrid), \
                     "Minium FT grid size: (%d, %d, %d)" % \
                     (self._ngrid[0], self._ngrid[1], self._ngrid[2])
+
+        # normalization factor so that 
+        # \sum_{ijk} | \phi_{ijk} | ^ 2 = 1
+        normFac = np.sqrt(np.prod(ngrid))
+
         if gvec is None:
             gvec = self.gvectors(ikpt)
 
@@ -272,22 +291,28 @@ class vaspwfc():
         
         if self._lsoc:
             wfc_spinor = []
-            dump = self.readBandCoeff(ispin, ikpt, iband, norm)
+            if Cg:
+                dump = Cg
+            else:
+                dump = self.readBandCoeff(ispin, ikpt, iband, norm)
             nplw = dump.shape[0] / 2
             
             # spinor up
             phi_k[gvec[:,0], gvec[:,1], gvec[:,2]] = dump[:nplw]
-            wfc_spinor.append(ifftn(phi_k))
+            wfc_spinor.append(ifftn(phi_k) * normFac)
             # spinor down
             phi_k[:,:,:] = 0.0j
             phi_k[gvec[:,0], gvec[:,1], gvec[:,2]] = dump[nplw:]
-            wfc_spinor.append(ifftn(phi_k))
+            wfc_spinor.append(ifftn(phi_k) * normFac)
 
             del dump
             return wfc_spinor
             
         else:
-            phi_k[gvec[:,0], gvec[:,1], gvec[:,2]] = self.readBandCoeff(ispin, ikpt, iband, norm)
+            if Cg:
+                phi_k[gvec[:,0], gvec[:,1], gvec[:,2]] = Cg
+            else:
+                phi_k[gvec[:,0], gvec[:,1], gvec[:,2]] = self.readBandCoeff(ispin, ikpt, iband, norm)
 
             if self._lgam:
                 # add some components that are excluded and perform c2r FFT
@@ -300,10 +325,10 @@ class vaspwfc():
                         phi_k[ii,jj,0] = phi_k[-ii,-jj,0].conjugate()
                 phi_k /= np.sqrt(2.)
                 phi_k[0,0,0] *= np.sqrt(2.)
-                return np.fft.irfftn(phi_k, s=ngrid)
+                return np.fft.irfftn(phi_k, s=ngrid) * normFac
             else:
                 # perform complex2complex FFT
-                return ifftn(phi_k)
+                return ifftn(phi_k * normFac)
 
     def readBandCoeff(self, ispin=1, ikpt=1, iband=1, norm=False):
         '''
