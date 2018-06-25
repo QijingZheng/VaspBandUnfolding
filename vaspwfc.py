@@ -277,6 +277,12 @@ class vaspwfc():
 
         # normalization factor so that 
         # \sum_{ijk} | \phi_{ijk} | ^ 2 = 1
+
+        # The default normalization has the direct transforms unscaled and the
+        # inverse transforms are scaled by 1/n. It is possible to obtain unitary
+        # transforms by setting the keyword argument norm to "ortho" (default is
+        # None) so that both direct and inverse transforms will be scaled by
+        # 1/\sqrt{n}.
         normFac = np.sqrt(np.prod(ngrid))
 
         if gvec is None:
@@ -447,10 +453,10 @@ class vaspwfc():
         '''
         Calculate the electron localization function (ELF) from WAVECAR.
 
-        (REF: Nature, 371(1994)683-686)
+        The following formula was extracted from VASP ELF.F:
                      _
                      h^2    *    2      T.........kinetic energy
-          T    = - 2 --- Psi grad Psi   T+TCORR...pos.definite kinetic energy
+          T    =  -2 --- Psi grad Psi   T+TCORR...pos.definite kinetic energy
                      2 m                TBOS......T of an ideal Bose-gas
                    _                                (=infimum of T+TCORR)
                  1 h^2      2           DH........T of hom.non-interact.e- - gas
@@ -465,10 +471,20 @@ class vaspwfc():
           DH   = - --- (3 Pi^2)  rho                /                   D   2
                  5 2 m                                           1 + ( ---- )
                                                                         DH
+
+        REF:
+            1. Nature, 371, 683-686 (1994)
+            2. Becke and Edgecombe, J. Chem. Phys., 92, 5397(1990)
+            3. M. Kohout and A. Savin, Int. J. Quantum Chem., 60, 875-882(1996)
+            4. http://www2.cpfs.mpg.de/ELF/index.php?content=06interpr.txt
         '''
 
+        # the k-point weights
         kptw = np.array(kptw, dtype=float)
-        assert kptw.shape = (self.nkpts,), "K-point weights must be provided to calculate charge density!"
+        assert kptw.shape = (self.nkpts,), "K-point weights must be provided \
+                                            to calculate charge density!"
+        # normalization
+        kptw /= kptw.sum()
 
         if ngrid is None:
             ngrid = self._ngrid.copy()
@@ -486,13 +502,23 @@ class vaspwfc():
         fz = [kk if kk < ngrid[2] / 2 + 1 else kk - ngrid[2]
                 for kk in range(ngrid[2])]
 
-        # plane waves fraction coordinate 
+        # plane-waves: fraction coordinate 
         # indexing = 'ij' so that outputs are of shape (ngrid[0], ngrid[1], ngrid[2])
         Dx, Dy, Dz = np.meshgrid(fx, fy, fz, indexing='ij')
-        # plane waves Cartesian coordinate 
+        # plane-waves: Cartesian coordinate 
         Gx, Gy, Gz = np.tensordot(self._Bcell, [Gx, Gy, Gz], axes=(0,0))
         # 
         G2 = Gx**2 + Gy**2 + Gz**2
+
+        # Charge density
+        rho = np.zeros((self._nspin, ngrid[0], ngrid[1], ngrid[2]), dtype=complex)
+        # Kinetic energy density
+        tau = np.zeros((self._nspin, ngrid[0], ngrid[1], ngrid[2]), dtype=complex)
+
+        for ispin in range(self._nspin):
+            for ikpt in range(self._nkpts):
+                for iband in range(self._nbands):
+                    pass
         pass
 
 ############################################################
