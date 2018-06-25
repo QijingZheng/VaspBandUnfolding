@@ -443,7 +443,7 @@ class vaspwfc():
         np.save('ipr.npy', self.ipr)
         return self.ipr
 
-    def elf(self, ngrid=None):
+    def elf(self, kptw, ngrid=None):
         '''
         Calculate the electron localization function (ELF) from WAVECAR.
 
@@ -467,6 +467,9 @@ class vaspwfc():
                                                                         DH
         '''
 
+        kptw = np.array(kptw, dtype=float)
+        assert kptw.shape = (self.nkpts,), "K-point weights must be provided to calculate charge density!"
+
         if ngrid is None:
             ngrid = self._ngrid.copy()
         else:
@@ -476,6 +479,20 @@ class vaspwfc():
                     "Minium FT grid size: (%d, %d, %d)" % \
                     (self._ngrid[0], self._ngrid[1], self._ngrid[2])
 
+        fx = [ii if ii < ngrid[0] / 2 + 1 else ii - ngrid[0]
+                for ii in range(ngrid[0])]
+        fy = [jj if jj < ngrid[1] / 2 + 1 else jj - ngrid[1]
+                for jj in range(ngrid[1])]
+        fz = [kk if kk < ngrid[2] / 2 + 1 else kk - ngrid[2]
+                for kk in range(ngrid[2])]
+
+        # plane waves fraction coordinate 
+        # indexing = 'ij' so that outputs are of shape (ngrid[0], ngrid[1], ngrid[2])
+        Dx, Dy, Dz = np.meshgrid(fx, fy, fz, indexing='ij')
+        # plane waves Cartesian coordinate 
+        Gx, Gy, Gz = np.tensordot(self._Bcell, [Gx, Gy, Gz], axes=(0,0))
+        # 
+        G2 = Gx**2 + Gy**2 + Gz**2
         pass
 
 ############################################################
