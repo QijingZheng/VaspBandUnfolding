@@ -275,14 +275,14 @@ class vaspwfc():
                     "Minium FT grid size: (%d, %d, %d)" % \
                     (self._ngrid[0], self._ngrid[1], self._ngrid[2])
 
+        # The default normalization of np.fft.fftn has the direct transforms
+        # unscaled and the inverse transforms are scaled by 1/n. It is possible
+        # to obtain unitary transforms by setting the keyword argument norm to
+        # "ortho" (default is None) so that both direct and inverse transforms
+        # will be scaled by 1/\sqrt{n}.
+
         # normalization factor so that 
         # \sum_{ijk} | \phi_{ijk} | ^ 2 = 1
-
-        # The default normalization has the direct transforms unscaled and the
-        # inverse transforms are scaled by 1/n. It is possible to obtain unitary
-        # transforms by setting the keyword argument norm to "ortho" (default is
-        # None) so that both direct and inverse transforms will be scaled by
-        # 1/\sqrt{n}.
         normFac = np.sqrt(np.prod(ngrid))
 
         if gvec is None:
@@ -477,12 +477,14 @@ class vaspwfc():
             2. Becke and Edgecombe, J. Chem. Phys., 92, 5397(1990)
             3. M. Kohout and A. Savin, Int. J. Quantum Chem., 60, 875-882(1996)
             4. http://www2.cpfs.mpg.de/ELF/index.php?content=06interpr.txt
+
+                            !!!!!! NOT TESTED !!!!!!
         '''
 
         # the k-point weights
         kptw = np.array(kptw, dtype=float)
-        assert kptw.shape = (self.nkpts,), "K-point weights must be provided \
-                                            to calculate charge density!"
+        assert kptw.shape == (self._nkpts,), "K-point weights must be provided \
+                                             to calculate charge density!"
         # normalization
         kptw /= kptw.sum()
 
@@ -506,20 +508,81 @@ class vaspwfc():
         # indexing = 'ij' so that outputs are of shape (ngrid[0], ngrid[1], ngrid[2])
         Dx, Dy, Dz = np.meshgrid(fx, fy, fz, indexing='ij')
         # plane-waves: Cartesian coordinate 
-        Gx, Gy, Gz = np.tensordot(self._Bcell, [Gx, Gy, Gz], axes=(0,0))
+        Gx, Gy, Gz = np.tensordot(self._Bcell * np.pi * 2, [Dx, Dy, Dz], axes=(0,0))
         # 
         G2 = Gx**2 + Gy**2 + Gz**2
 
-        # Charge density
-        rho = np.zeros((self._nspin, ngrid[0], ngrid[1], ngrid[2]), dtype=complex)
-        # Kinetic energy density
-        tau = np.zeros((self._nspin, ngrid[0], ngrid[1], ngrid[2]), dtype=complex)
-
+        chi = []
         for ispin in range(self._nspin):
+            # Charge density
+            rho = np.zeros((ngrid[0], ngrid[1], ngrid[2]), dtype=complex)
+            # Kinetic energy density
+            tau = np.zeros((ngrid[0], ngrid[1], ngrid[2]), dtype=complex)
+
             for ikpt in range(self._nkpts):
                 for iband in range(self._nbands):
-                    pass
-        pass
+                    weight = kptw[ikpt] * self._occs[ispin, ikpt, iband]
+
+                    # wavefunction in real space
+                    phi_r  = self.wfc_r(ispin=ispin+1, ikpt=ikpt+1,
+                                        iband=iband+1,
+                                        ngrid=ngrid,
+                                        norm=True)
+                    # print ispin, ikpt, iband, np.sum(np.abs(phi_r)**2)
+
+                    # wavefunction in reciprocal space
+                    phi_q  = np.fft.fftn(phi_r, norm='ortho')
+
+                    # grad^2 \phi in reciprocal space
+                    lap_phi_q = - G2 * phi_q
+                    # grad^2 \phi in real space
+                    lap_phi_r = np.fft.ifftn(lap_phi_q, norm='ortho')
+
+                    # \phi* grad^2 \phi in real space --> kinetic energy density
+                    tau += phi_r.conj() * lap_phi_r * weight
+
+                    # charge density in real space
+                    rho += phi_r.conj() * phi_r * weight
+
+            # print rho.sum()
+            # charge density in reciprocal space
+            rho_q = np.fft.fftn(rho, norm='ortho')
+
+            # grad^2 rho: laplacian of charge density
+            lap_rho_q = -G2 * rho_q
+            lap_rho_r = np.fft.ifftn(lap_rho_q, norm='ortho')
+
+            # charge density gradient
+            grad_rho_x = np.fft.ifft(1j * Gx * np.fft.fft(rho, axis=0), axis=0)
+            grad_rho_y = np.fft.ifft(1j * Gy * np.fft.fft(rho, axis=1), axis=1)
+            grad_rho_z = np.fft.ifft(1j * Gz * np.fft.fft(rho, axis=2), axis=2)
+
+            grad_rho_sq = np.abs(grad_rho_x)**2 \
+                        + np.abs(grad_rho_y)**2 \
+                        + np.abs(grad_rho_z)**2
+
+            # print rho.imag.max(), rho.imag.min()
+            # print tau.imag.max(), tau.imag.min()
+            # print lap_rho_r.imag.max(), lap_rho_r.imag.min()
+            #
+            # print rho.real.max(), rho.real.min()
+            # print tau.real.max(), tau.real.min()
+            # print lap_rho_r.real.max(), lap_rho_r.real.min()
+
+            rho = rho.real
+            tau = tau.real
+            lap_rho_r = lap_rho_r.real
+
+            Dh = np.where(rho > 0.0,
+                          3./5 * (3.0 * np.pi**2)**(2./3) * rho**(5./3),
+                          0.0
+                          )
+            Dh[Dh < 1E-8] = 1E-8
+
+            D0 = tau + 0.5 * lap_rho_r - 0.25 * grad_rho_sq / rho
+            chi.append(1. / (1. + (D0 / Dh)**2))
+        
+        return chi
 
 ############################################################
 
