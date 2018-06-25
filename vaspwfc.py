@@ -202,7 +202,7 @@ class vaspwfc():
 
         return np.asarray(Gvec, dtype=int)
 
-    def save2vesta(self, phi=None, poscar='POSCAR', prefix='wfc'):
+    def save2vesta(self, phi=None, lreal=False, poscar='POSCAR', prefix='wfc'):
         '''
         Save the real space pseudo-wavefunction as vesta format.
         '''
@@ -229,7 +229,7 @@ class vaspwfc():
                         out.write('%16.8E ' % phi.real[ii,jj,kk])
                         if nwrite % 10 == 0:
                             out.write('\n')
-        if not self._lgam:
+        if not (self._lgam or lreal):
             with open(prefix + '_i.vasp', 'w') as out:
                 out.write(head)
                 nwrite=0
@@ -259,7 +259,7 @@ class vaspwfc():
             ngrid : the FFT grid size
             norm  : normalized Cg?
 
-        The return wavefunctions are normalized so that
+        The return wavefunctions are normalized in a way that
 
                         \sum_{ijk} | \phi_{ijk} | ^ 2 = 1
             
@@ -368,7 +368,7 @@ class vaspwfc():
         assert 1 <= ikpt  <= self._nkpts,  'Invalid kpoint index!'
         assert 1 <= iband <= self._nbands, 'Invalid band index!'
 
-    def TransitionDipoleMoment(self, ks_i, ks_j, norm=False):
+    def TransitionDipoleMoment(self, ks_i, ks_j, norm=True):
         '''
         calculate Transition Dipole Moment between two KS states.
         TDM in momentum representation
@@ -386,7 +386,7 @@ class vaspwfc():
         '''
 
         ks_i = list(ks_i); ks_j = list(ks_j)
-        assert len(ks_i) == len(ks_j) == 3, 'Must be there indexes!'
+        assert len(ks_i) == len(ks_j) == 3, 'Must be three indexes!'
         assert ks_i[1] == ks_j[1], 'k-point of the two states differ!'
         self.checkIndex(*ks_i)
         self.checkIndex(*ks_j)
@@ -442,6 +442,41 @@ class vaspwfc():
 
         np.save('ipr.npy', self.ipr)
         return self.ipr
+
+    def elf(self, ngrid=None):
+        '''
+        Calculate the electron localization function (ELF) from WAVECAR.
+
+        (REF: Nature, 371(1994)683-686)
+                     _
+                     h^2    *    2      T.........kinetic energy
+          T    = - 2 --- Psi grad Psi   T+TCORR...pos.definite kinetic energy
+                     2 m                TBOS......T of an ideal Bose-gas
+                   _                                (=infimum of T+TCORR)
+                 1 h^2      2           DH........T of hom.non-interact.e- - gas
+          TCORR= - ---  grad rho                    (acc.to Fermi)
+                 2 2 m                  ELF.......electron-localization-function
+                   _             2
+                 1 h^2 |grad rho|
+          TBOS = - --- ----------       D = T + TCORR - TBOS
+                 4 2 m    rho
+                   _                                \                1
+                 3 h^2        2/3  5/3          =====>    ELF = ------------
+          DH   = - --- (3 Pi^2)  rho                /                   D   2
+                 5 2 m                                           1 + ( ---- )
+                                                                        DH
+        '''
+
+        if ngrid is None:
+            ngrid = self._ngrid.copy()
+        else:
+            ngrid = np.array(ngrid, dtype=int)
+            assert ngrid.shape == (3,)
+            assert np.alltrue(ngrid >= self._ngrid), \
+                    "Minium FT grid size: (%d, %d, %d)" % \
+                    (self._ngrid[0], self._ngrid[1], self._ngrid[2])
+
+        pass
 
 ############################################################
 
