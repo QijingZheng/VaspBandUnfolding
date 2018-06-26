@@ -35,10 +35,10 @@ measures the extent of spatial localization of the reference electron and
 provides a method for the mapping of electron pair probability in
 multielectronic systems. (from wiki)
 
->  Nature, 371, 683-686 (1994)
->  Becke and Edgecombe, J. Chem. Phys., 92, 5397(1990)
->  M. Kohout and A. Savin, Int. J. Quantum Chem., 60, 875-882(1996)
->  http://www2.cpfs.mpg.de/ELF/index.php?content=06interpr.txt
+* Nature, 371, 683-686 (1994)
+* Becke and Edgecombe, J. Chem. Phys., 92, 5397(1990)
+* M. Kohout and A. Savin, Int. J. Quantum Chem., 60, 875-882(1996)
+* http://www2.cpfs.mpg.de/ELF/index.php?content=06interpr.txt
 
 
 ## Band unfolding
