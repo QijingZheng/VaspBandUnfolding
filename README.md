@@ -25,20 +25,21 @@ IPR(\phi_j) = -------------------------
 
 where n iters over the number of grid points.
 
-## Electron Localization Function (ELF)
+## Electron Localization Function
 (Still need to be tested!)
 
-```python
-import numpy as np
-from vaspwfc import vaspwfc, save2vesta
+In quantum chemistry, the electron localization function (ELF) is a measure of
+the likelihood of finding an electron in the neighborhood space of a reference
+electron located at a given point and with the same spin. Physically, this
+measures the extent of spatial localization of the reference electron and
+provides a method for the mapping of electron pair probability in
+multielectronic systems. (from wiki)
 
-kptw = [1, 6, 6, 6, 6, 6, 6, 12, 12, 12, 6, 6, 12, 12, 6, 6]
+>  Nature, 371, 683-686 (1994)
+>  Becke and Edgecombe, J. Chem. Phys., 92, 5397(1990)
+>  M. Kohout and A. Savin, Int. J. Quantum Chem., 60, 875-882(1996)
+>  http://www2.cpfs.mpg.de/ELF/index.php?content=06interpr.txt
 
-wfc = vaspwfc('./WAVECAR')
-# chi = wfc.elf(kptw=kptw, ngrid=wfc._ngrid * 2)
-chi = wfc.elf(kptw=kptw, ngrid=[20, 20, 150])
-save2vesta(chi[0], lreal=True, poscar='POSCAR', prefix='elf')
-```
 
 ## Band unfolding
 
@@ -96,6 +97,18 @@ Below are the real (left) and imaginary (right) part of the selected KS orbital:
 ![real part](./examples/wfc_r/r_resize.png) | 
 ![imaginary part](./examples/wfc_r/i_resize.png)
 
+## Electron Localization Function
+```python
+import numpy as np
+from vaspwfc import vaspwfc, save2vesta
+
+kptw = [1, 6, 6, 6, 6, 6, 6, 12, 12, 12, 6, 6, 12, 12, 6, 6]
+
+wfc = vaspwfc('./WAVECAR')
+# chi = wfc.elf(kptw=kptw, ngrid=wfc._ngrid * 2)
+chi = wfc.elf(kptw=kptw, ngrid=[20, 20, 150])
+save2vesta(chi[0], lreal=True, poscar='POSCAR', prefix='elf')
+```
 ## Band unfolding 
 
 Here, we use MoS2 as an example to illustrate the procedures of band unfolding.
