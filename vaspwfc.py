@@ -498,7 +498,11 @@ class vaspwfc():
                      _
                      h^2    *    2      T.........kinetic energy
           T    =  -2 --- Psi grad Psi   T+TCORR...pos.definite kinetic energy
-                     2 m                TBOS......T of an ideal Bose-gas
+                   ^ 2 m                TBOS......T of an ideal Bose-gas
+
+                   I am not sure if we need to times 2 here, omit in this
+                   script.
+
                    _                                (=infimum of T+TCORR)
                  1 h^2      2           DH........T of hom.non-interact.e- - gas
           TCORR= - ---  grad rho                    (acc.to Fermi)
@@ -552,6 +556,8 @@ class vaspwfc():
         Gx, Gy, Gz = np.tensordot(self._Bcell * np.pi * 2, [Dx, Dy, Dz], axes=(0,0))
         # 
         G2 = Gx**2 + Gy**2 + Gz**2
+        # k-points vectors in Cartesian coordinate
+        vkpts = np.dot(self._kvecs, self._Bcell * 2 * np.pi)
 
         # normalization factor so that 
         # \sum_{ijk} | \phi_{ijk} | ^ 2 * V / Ngrid = 1
@@ -591,7 +597,6 @@ class vaspwfc():
                     # charge density in real space
                     rho += phi_r.conj() * phi_r * weight
 
-            # print "kaka", rho.sum()
             # charge density in reciprocal space
             rho_q = np.fft.fftn(rho, norm='ortho')
 
@@ -600,21 +605,16 @@ class vaspwfc():
             lap_rho_r = np.fft.ifftn(lap_rho_q, norm='ortho')
 
             # charge density gradient
-            grad_rho_x = np.fft.ifft(1j * Gx * np.fft.fft(rho, axis=0), axis=0)
-            grad_rho_y = np.fft.ifft(1j * Gy * np.fft.fft(rho, axis=1), axis=1)
-            grad_rho_z = np.fft.ifft(1j * Gz * np.fft.fft(rho, axis=2), axis=2)
+            # grad_rho_x = np.fft.ifft(1j * Gx * np.fft.fft(rho, axis=0), axis=0)
+            # grad_rho_y = np.fft.ifft(1j * Gy * np.fft.fft(rho, axis=1), axis=1)
+            # grad_rho_z = np.fft.ifft(1j * Gz * np.fft.fft(rho, axis=2), axis=2)
+            grad_rho_x = np.fft.ifftn(1j * Gx * rho_q)
+            grad_rho_y = np.fft.ifftn(1j * Gy * rho_q)
+            grad_rho_z = np.fft.ifftn(1j * Gz * rho_q)
 
             grad_rho_sq = np.abs(grad_rho_x)**2 \
                         + np.abs(grad_rho_y)**2 \
                         + np.abs(grad_rho_z)**2
-
-            # print rho.imag.max(), rho.imag.min()
-            # print tau.imag.max(), tau.imag.min()
-            # print lap_rho_r.imag.max(), lap_rho_r.imag.min()
-            #
-            # print rho.real.max(), rho.real.min()
-            # print tau.real.max(), tau.real.min()
-            # print lap_rho_r.real.max(), lap_rho_r.real.min()
 
             rho = rho.real
             tau = tau.real
@@ -626,7 +626,7 @@ class vaspwfc():
                           )
             Dh[Dh < 1E-8] = 1E-8
 
-            D0 = tau + 0.5 * lap_rho_r - 0.25 * grad_rho_sq / rho
+            D0 = -tau + 0.5 * lap_rho_r - 0.25 * grad_rho_sq / rho
             chi.append(1. / (1. + (D0 / Dh)**2))
         
         return chi
