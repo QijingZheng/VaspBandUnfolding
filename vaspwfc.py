@@ -7,6 +7,47 @@ from vasp_constant import *
 from scipy.fftpack import fftfreq, fftn, ifftn
 
 ############################################################
+def save2vesta(phi=None, poscar='POSCAR', prefix='wfc', 
+               lgam=False, lreal=False):
+    '''
+    Save the real space pseudo-wavefunction as vesta format.
+    '''
+    nx, ny, nz = phi.shape
+    try:
+        pos = open(poscar, 'r')
+        head = ''
+        for line in pos:
+            if line.strip():
+                head += line
+            else:
+                break
+        head += '\n%5d%5d%5d\n' % (nx, ny, nz)
+    except:
+        raise IOError('Failed to open %s' % poscar)
+
+    with open(prefix + '_r.vasp', 'w') as out:
+        out.write(head)
+        nwrite=0
+        for kk in range(nz):
+            for jj in range(ny):
+                for ii in range(nx):
+                    nwrite += 1
+                    out.write('%16.8E ' % phi.real[ii,jj,kk])
+                    if nwrite % 10 == 0:
+                        out.write('\n')
+    if not (lgam or lreal):
+        with open(prefix + '_i.vasp', 'w') as out:
+            out.write(head)
+            nwrite=0
+            for kk in range(nz):
+                for jj in range(ny):
+                    for ii in range(nx):
+                        nwrite += 1
+                        out.write('%16.8E ' % phi.imag[ii,jj,kk])
+                        if nwrite % 10 == 0:
+                            out.write('\n')
+
+############################################################
 '''
 This program is based on the code written by Ren Hao <renh@upc.edu.cn>.
 '''
@@ -379,7 +420,7 @@ class vaspwfc():
         calculate Transition Dipole Moment between two KS states.
         TDM in momentum representation
                                              ___              
-                                  i⋅h        ╲                
+                                   i⋅h       ╲                
         <psi_a| r | psi_b> =    --------- ⋅   ╲   Cai⋅Cbi⋅Gi
                                  Eb - Ea      ╱               
                                              ╱                
@@ -512,6 +553,10 @@ class vaspwfc():
         # 
         G2 = Gx**2 + Gy**2 + Gz**2
 
+        # normalization factor so that 
+        # \sum_{ijk} | \phi_{ijk} | ^ 2 * V / Ngrid = 1
+        normFac = np.sqrt(np.prod(ngrid) / self._Omega)
+
         chi = []
         for ispin in range(self._nspin):
             # Charge density
@@ -521,20 +566,22 @@ class vaspwfc():
 
             for ikpt in range(self._nkpts):
                 for iband in range(self._nbands):
+                    # omit the empty bands
+                    if self._occs[ispin, ikpt, iband] == 0.0: continue
+
                     weight = kptw[ikpt] * self._occs[ispin, ikpt, iband]
 
                     # wavefunction in real space
                     phi_r  = self.wfc_r(ispin=ispin+1, ikpt=ikpt+1,
                                         iband=iband+1,
                                         ngrid=ngrid,
-                                        norm=True)
-                    # print ispin, ikpt, iband, np.sum(np.abs(phi_r)**2)
+                                        norm=True) * normFac
 
                     # wavefunction in reciprocal space
                     phi_q  = np.fft.fftn(phi_r, norm='ortho')
 
                     # grad^2 \phi in reciprocal space
-                    lap_phi_q = - G2 * phi_q
+                    lap_phi_q = -G2 * phi_q
                     # grad^2 \phi in real space
                     lap_phi_r = np.fft.ifftn(lap_phi_q, norm='ortho')
 
@@ -544,7 +591,7 @@ class vaspwfc():
                     # charge density in real space
                     rho += phi_r.conj() * phi_r * weight
 
-            # print rho.sum()
+            # print "kaka", rho.sum()
             # charge density in reciprocal space
             rho_q = np.fft.fftn(rho, norm='ortho')
 
