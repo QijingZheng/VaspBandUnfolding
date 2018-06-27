@@ -499,8 +499,8 @@ class vaspwfc():
                      h^2    *    2      T.........kinetic energy
           T    =  -2 --- Psi grad Psi   T+TCORR...pos.definite kinetic energy
                    ^ 2 m                TBOS......T of an ideal Bose-gas
-
-                   I am not sure if we need to times 2 here, omit in this
+                   ^
+                   I am not sure if we need to times 2 here, use 1 in this
                    script.
 
                    _                                (=infimum of T+TCORR)
@@ -529,7 +529,7 @@ class vaspwfc():
         # the k-point weights
         kptw = np.array(kptw, dtype=float)
         assert kptw.shape == (self._nkpts,), "K-point weights must be provided \
-                                             to calculate charge density!"
+                                              to calculate charge density!"
         # normalization
         kptw /= kptw.sum()
 
@@ -549,12 +549,12 @@ class vaspwfc():
         fz = [kk if kk < ngrid[2] / 2 + 1 else kk - ngrid[2]
                 for kk in range(ngrid[2])]
 
-        # plane-waves: fraction coordinate 
+        # plane-waves: Reciprocal coordinate 
         # indexing = 'ij' so that outputs are of shape (ngrid[0], ngrid[1], ngrid[2])
         Dx, Dy, Dz = np.meshgrid(fx, fy, fz, indexing='ij')
         # plane-waves: Cartesian coordinate 
         Gx, Gy, Gz = np.tensordot(self._Bcell * np.pi * 2, [Dx, Dy, Dz], axes=(0,0))
-        # 
+        #
         G2 = Gx**2 + Gy**2 + Gz**2
         # k-points vectors in Cartesian coordinate
         vkpts = np.dot(self._kvecs, self._Bcell * 2 * np.pi)
@@ -593,7 +593,7 @@ class vaspwfc():
                     lap_phi_r = np.fft.ifftn(lap_phi_q, norm='ortho')
 
                     # \phi* grad^2 \phi in real space --> kinetic energy density
-                    tau += -phi_r.conj() * lap_phi_r * weight
+                    tau += -phi_r * lap_phi_r.conj() * weight
 
                     # charge density in real space
                     rho += phi_r.conj() * phi_r * weight
