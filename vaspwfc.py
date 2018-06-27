@@ -283,7 +283,9 @@ class vaspwfc():
                                 out.write('\n')
 
     def wfc_r(self, ispin=1, ikpt=1, iband=1,
-                    gvec=None, Cg=None, ngrid=None, norm=True):
+                    gvec=None, Cg=None, ngrid=None,
+                    rescale=None,
+                    norm=True):
         '''
         Obtain the pseudo-wavefunction of the specified KS states in real space
         by performing FT transform on the reciprocal space planewave
@@ -322,9 +324,9 @@ class vaspwfc():
         # "ortho" (default is None) so that both direct and inverse transforms
         # will be scaled by 1/\sqrt{n}.
 
-        # normalization factor so that 
+        # default normalization factor so that 
         # \sum_{ijk} | \phi_{ijk} | ^ 2 = 1
-        normFac = np.sqrt(np.prod(ngrid))
+        normFac = rescale if rescale is not None else np.sqrt(np.prod(ngrid)) 
 
         if gvec is None:
             gvec = self.gvectors(ikpt)
@@ -356,7 +358,7 @@ class vaspwfc():
             return wfc_spinor
             
         else:
-            if Cg:
+            if Cg is not None:
                 phi_k[gvec[:,0], gvec[:,1], gvec[:,2]] = Cg
             else:
                 phi_k[gvec[:,0], gvec[:,1], gvec[:,2]] = self.readBandCoeff(ispin, ikpt, iband, norm)
@@ -571,13 +573,19 @@ class vaspwfc():
             tau = np.zeros((ngrid[0], ngrid[1], ngrid[2]), dtype=complex)
 
             for ikpt in range(self._nkpts):
-                k2 = np.linalg.norm(vkpts[ikpt])**2
+                k2    = np.linalg.norm(vkpts[ikpt])**2
+                # igvec = self.gvectors(ikpt+1)
+                # rgvec = np.dot(igvec, self._Bcell * 2 * np.pi)
+                # gk2   = np.linalg.norm(rgvec, axis=1) + k2
                 for iband in range(self._nbands):
                     # omit the empty bands
                     if self._occs[ispin, ikpt, iband] == 0.0: continue
 
                     weight = kptw[ikpt] * self._occs[ispin, ikpt, iband]
 
+                    ########################################
+                    # slower
+                    ########################################
                     # wavefunction in real space
                     phi_r  = self.wfc_r(ispin=ispin+1, ikpt=ikpt+1,
                                         iband=iband+1,
@@ -591,6 +599,28 @@ class vaspwfc():
                     lap_phi_q = -(G2 + k2) * phi_q
                     # grad^2 \phi in real space
                     lap_phi_r = np.fft.ifftn(lap_phi_q, norm='ortho')
+
+                    ########################################
+                    # faster, but with problems
+                    ########################################
+                    # # wavefunction in reciprocal space
+                    # phi_q = self.readBandCoeff(ispin=ispin+1, ikpt=ikpt+1,
+                    #                            iband=iband+1, norm=True)
+                    # # wavefunction in real space
+                    # phi_r  = self.wfc_r(ispin=ispin+1, ikpt=ikpt+1,
+                    #                     iband=iband+1,
+                    #                     ngrid=ngrid,
+                    #                     gvec=igvec,
+                    #                     Cg=phi_q,
+                    #                     norm=True) * normFac
+                    # # grad^2 \phi in reciprocal space
+                    # lap_phi_q = -gk2 * phi_q
+                    # # grad^2 \phi in real space
+                    # lap_phi_r = self.wfc_r(ispin=ispin+1, ikpt=ikpt+1,
+                    #                        iband=iband+1,
+                    #                        ngrid=ngrid,
+                    #                        gvec=igvec,
+                    #                        Cg=lap_phi_q) * normFac
 
                     # \phi* grad^2 \phi in real space --> kinetic energy density
                     tau += -phi_r * lap_phi_r.conj() * weight
