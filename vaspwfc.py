@@ -573,10 +573,12 @@ class vaspwfc():
             tau = np.zeros((ngrid[0], ngrid[1], ngrid[2]), dtype=complex)
 
             for ikpt in range(self._nkpts):
+
                 k2    = np.linalg.norm(vkpts[ikpt])**2
-                # igvec = self.gvectors(ikpt+1)
-                # rgvec = np.dot(igvec, self._Bcell * 2 * np.pi)
-                # gk2   = np.linalg.norm(rgvec, axis=1) + k2
+                igvec = self.gvectors(ikpt+1)
+                rgvec = np.dot(igvec, self._Bcell * 2 * np.pi)
+                gk2   = np.linalg.norm(rgvec, axis=1)**2 + k2
+
                 for iband in range(self._nbands):
                     # omit the empty bands
                     if self._occs[ispin, ikpt, iband] == 0.0: continue
@@ -586,41 +588,41 @@ class vaspwfc():
                     ########################################
                     # slower
                     ########################################
-                    # wavefunction in real space
-                    phi_r  = self.wfc_r(ispin=ispin+1, ikpt=ikpt+1,
-                                        iband=iband+1,
-                                        ngrid=ngrid,
-                                        norm=True) * normFac
-
-                    # wavefunction in reciprocal space
-                    phi_q  = np.fft.fftn(phi_r, norm='ortho')
-
-                    # grad^2 \phi in reciprocal space
-                    lap_phi_q = -(G2 + k2) * phi_q
-                    # grad^2 \phi in real space
-                    lap_phi_r = np.fft.ifftn(lap_phi_q, norm='ortho')
-
-                    ########################################
-                    # faster, but with problems
-                    ########################################
-                    # # wavefunction in reciprocal space
-                    # phi_q = self.readBandCoeff(ispin=ispin+1, ikpt=ikpt+1,
-                    #                            iband=iband+1, norm=True)
                     # # wavefunction in real space
                     # phi_r  = self.wfc_r(ispin=ispin+1, ikpt=ikpt+1,
                     #                     iband=iband+1,
                     #                     ngrid=ngrid,
-                    #                     gvec=igvec,
-                    #                     Cg=phi_q,
                     #                     norm=True) * normFac
+                    #
+                    # # wavefunction in reciprocal space
+                    # phi_q  = np.fft.fftn(phi_r, norm='ortho')
+                    #
                     # # grad^2 \phi in reciprocal space
-                    # lap_phi_q = -gk2 * phi_q
+                    # lap_phi_q = -(G2 + k2) * phi_q
                     # # grad^2 \phi in real space
-                    # lap_phi_r = self.wfc_r(ispin=ispin+1, ikpt=ikpt+1,
-                    #                        iband=iband+1,
-                    #                        ngrid=ngrid,
-                    #                        gvec=igvec,
-                    #                        Cg=lap_phi_q) * normFac
+                    # lap_phi_r = np.fft.ifftn(lap_phi_q, norm='ortho')
+
+                    ########################################
+                    # faster
+                    ########################################
+                    # wavefunction in reciprocal space
+                    phi_q = self.readBandCoeff(ispin=ispin+1, ikpt=ikpt+1,
+                                               iband=iband+1, norm=True)
+                    # wavefunction in real space
+                    phi_r  = self.wfc_r(ispin=ispin+1, ikpt=ikpt+1,
+                                        iband=iband+1,
+                                        ngrid=ngrid,
+                                        gvec=igvec,
+                                        Cg=phi_q,
+                                        norm=True) * normFac
+                    # grad^2 \phi in reciprocal space
+                    lap_phi_q = -gk2 * phi_q
+                    # grad^2 \phi in real space
+                    lap_phi_r = self.wfc_r(ispin=ispin+1, ikpt=ikpt+1,
+                                           iband=iband+1,
+                                           ngrid=ngrid,
+                                           gvec=igvec,
+                                           Cg=lap_phi_q) * normFac
 
                     # \phi* grad^2 \phi in real space --> kinetic energy density
                     tau += -phi_r * lap_phi_r.conj() * weight
