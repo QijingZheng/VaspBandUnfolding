@@ -536,7 +536,7 @@ class vaspwfc():
         kptw /= kptw.sum()
 
         if ngrid is None:
-            ngrid = self._ngrid.copy()
+            ngrid = self._ngrid.copy() * 2
         else:
             ngrid = np.array(ngrid, dtype=int)
             assert ngrid.shape == (3,)
@@ -657,10 +657,10 @@ class vaspwfc():
                           3./5 * (3.0 * np.pi**2)**(2./3) * rho**(5./3),
                           0.0
                           )
+            # save2vesta(HSQDTM * Dh, poscar='POSCAR', prefix='Dh', lreal=True)
             Dh[Dh < 1E-8] = 1E-8
 
             D0 = tau + 0.5 * lap_rho_r - 0.25 * grad_rho_sq / rho
-            D0 *= HSQDTM
             chi.append(1. / (1. + (D0 / Dh)**2))
         
         return chi
