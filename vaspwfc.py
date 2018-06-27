@@ -571,6 +571,7 @@ class vaspwfc():
             tau = np.zeros((ngrid[0], ngrid[1], ngrid[2]), dtype=complex)
 
             for ikpt in range(self._nkpts):
+                k2 = np.linalg.norm(vkpts[ikpt])**2
                 for iband in range(self._nbands):
                     # omit the empty bands
                     if self._occs[ispin, ikpt, iband] == 0.0: continue
@@ -587,12 +588,12 @@ class vaspwfc():
                     phi_q  = np.fft.fftn(phi_r, norm='ortho')
 
                     # grad^2 \phi in reciprocal space
-                    lap_phi_q = -G2 * phi_q
+                    lap_phi_q = -(G2 + k2) * phi_q
                     # grad^2 \phi in real space
                     lap_phi_r = np.fft.ifftn(lap_phi_q, norm='ortho')
 
                     # \phi* grad^2 \phi in real space --> kinetic energy density
-                    tau += phi_r.conj() * lap_phi_r * weight
+                    tau += -phi_r.conj() * lap_phi_r * weight
 
                     # charge density in real space
                     rho += phi_r.conj() * phi_r * weight
@@ -604,7 +605,7 @@ class vaspwfc():
             lap_rho_q = -G2 * rho_q
             lap_rho_r = np.fft.ifftn(lap_rho_q, norm='ortho')
 
-            # charge density gradient
+            # charge density gradient: grad rho
             # grad_rho_x = np.fft.ifft(1j * Gx * np.fft.fft(rho, axis=0), axis=0)
             # grad_rho_y = np.fft.ifft(1j * Gy * np.fft.fft(rho, axis=1), axis=1)
             # grad_rho_z = np.fft.ifft(1j * Gz * np.fft.fft(rho, axis=2), axis=2)
@@ -626,7 +627,8 @@ class vaspwfc():
                           )
             Dh[Dh < 1E-8] = 1E-8
 
-            D0 = -tau + 0.5 * lap_rho_r - 0.25 * grad_rho_sq / rho
+            D0 = tau + 0.5 * lap_rho_r - 0.25 * grad_rho_sq / rho
+            D0 *= HSQDTM
             chi.append(1. / (1. + (D0 / Dh)**2))
         
         return chi
