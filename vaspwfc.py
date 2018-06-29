@@ -574,9 +574,13 @@ class vaspwfc():
 
             for ikpt in range(self._nkpts):
 
+                # norm square of the k-point vector
                 k2    = np.linalg.norm(vkpts[ikpt])**2
+                # plane-wave G-vectors
                 igvec = self.gvectors(ikpt+1)
+                # plane-wave G-vectors in Cartesian coordinate
                 rgvec = np.dot(igvec, self._Bcell * 2 * np.pi)
+                # | G + k |^2
                 gk2   = np.linalg.norm(rgvec, axis=1)**2 + k2
 
                 for iband in range(self._nbands):
@@ -641,9 +645,9 @@ class vaspwfc():
             # grad_rho_x = np.fft.ifft(1j * Gx * np.fft.fft(rho, axis=0), axis=0)
             # grad_rho_y = np.fft.ifft(1j * Gy * np.fft.fft(rho, axis=1), axis=1)
             # grad_rho_z = np.fft.ifft(1j * Gz * np.fft.fft(rho, axis=2), axis=2)
-            grad_rho_x = np.fft.ifftn(1j * Gx * rho_q)
-            grad_rho_y = np.fft.ifftn(1j * Gy * rho_q)
-            grad_rho_z = np.fft.ifftn(1j * Gz * rho_q)
+            grad_rho_x = np.fft.ifftn(1j * Gx * rho_q, norm='ortho')
+            grad_rho_y = np.fft.ifftn(1j * Gy * rho_q, norm='ortho')
+            grad_rho_z = np.fft.ifftn(1j * Gz * rho_q, norm='ortho')
 
             grad_rho_sq = np.abs(grad_rho_x)**2 \
                         + np.abs(grad_rho_y)**2 \
@@ -657,7 +661,6 @@ class vaspwfc():
                           3./5 * (3.0 * np.pi**2)**(2./3) * rho**(5./3),
                           0.0
                           )
-            # save2vesta(HSQDTM * Dh, poscar='POSCAR', prefix='Dh', lreal=True)
             Dh[Dh < 1E-8] = 1E-8
 
             D0 = tau + 0.5 * lap_rho_r - 0.25 * grad_rho_sq / rho
