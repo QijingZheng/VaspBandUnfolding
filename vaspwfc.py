@@ -587,7 +587,8 @@ class vaspwfc():
                     # omit the empty bands
                     if self._occs[ispin, ikpt, iband] == 0.0: continue
 
-                    weight = kptw[ikpt] * self._occs[ispin, ikpt, iband]
+                    rspin = 2.0 if self._nspin == 1 else 1.0
+                    weight = rspin * kptw[ikpt] * self._occs[ispin, ikpt, iband]
 
                     ########################################
                     # slower
@@ -610,8 +611,10 @@ class vaspwfc():
                     # faster
                     ########################################
                     # wavefunction in reciprocal space
+                    # VASP does NOT do normalization in elf.F
                     phi_q = self.readBandCoeff(ispin=ispin+1, ikpt=ikpt+1,
-                                               iband=iband+1, norm=True)
+                                               iband=iband+1,
+                                               norm=False)
                     # wavefunction in real space
                     phi_r  = self.wfc_r(ispin=ispin+1, ikpt=ikpt+1,
                                         iband=iband+1,
@@ -634,6 +637,7 @@ class vaspwfc():
                     # charge density in real space
                     rho += phi_r.conj() * phi_r * weight
 
+            print rho.sum(), tau.sum() * HSQDTM
             # charge density in reciprocal space
             rho_q = np.fft.fftn(rho, norm='ortho')
 
