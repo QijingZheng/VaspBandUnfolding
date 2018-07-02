@@ -498,7 +498,7 @@ class vaspwfc():
         np.save('ipr.npy', self.ipr)
         return self.ipr
 
-    def elf(self, kptw, ngrid=None):
+    def elf(self, kptw, ngrid=None, warn=True):
         '''
         Calculate the electron localization function (ELF) from WAVECAR.
 
@@ -530,9 +530,17 @@ class vaspwfc():
             2. Becke and Edgecombe, J. Chem. Phys., 92, 5397(1990)
             3. M. Kohout and A. Savin, Int. J. Quantum Chem., 60, 875-882(1996)
             4. http://www2.cpfs.mpg.de/ELF/index.php?content=06interpr.txt
-
-                            !!!!!! NOT TESTED !!!!!!
         '''
+
+        if warn:
+            print """
+            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            If you are using VESTA to view the resulting ELF, please rename the
+            output file as ELFCAR, otherwise there will be some error in the
+            isosurface plot! 
+                 DOES NOT KNOW WHY! Maybe has something to with VESTA!
+            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            """
 
         # the k-point weights
         kptw = np.array(kptw, dtype=float)
