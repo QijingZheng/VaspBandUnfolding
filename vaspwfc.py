@@ -536,7 +536,7 @@ class vaspwfc():
         kptw /= kptw.sum()
 
         if ngrid is None:
-            ngrid = self._ngrid.copy() * 2
+            ngrid = self._ngrid * 2
         else:
             ngrid = np.array(ngrid, dtype=int)
             assert ngrid.shape == (3,)
@@ -556,16 +556,16 @@ class vaspwfc():
         Dx, Dy, Dz = np.meshgrid(fx, fy, fz, indexing='ij')
         # plane-waves: Cartesian coordinate 
         Gx, Gy, Gz = np.tensordot(self._Bcell * np.pi * 2, [Dx, Dy, Dz], axes=(0,0))
-        #
+        # the norm squared of the G-vectors
         G2 = Gx**2 + Gy**2 + Gz**2
         # k-points vectors in Cartesian coordinate
         vkpts = np.dot(self._kvecs, self._Bcell * 2 * np.pi)
 
         # normalization factor so that 
-        # \sum_{ijk} | \phi_{ijk} | ^ 2 * V / Ngrid = 1
+        # \sum_{ijk} | \phi_{ijk} | ^ 2 * volume / Ngrid = 1
         normFac = np.sqrt(np.prod(ngrid) / self._Omega)
 
-        chi = []
+        ElectronLocalizationFunction = []
         for ispin in range(self._nspin):
             # Charge density
             rho = np.zeros((ngrid[0], ngrid[1], ngrid[2]), dtype=complex)
@@ -574,14 +574,14 @@ class vaspwfc():
 
             for ikpt in range(self._nkpts):
 
-                # norm square of the k-point vector
-                k2    = np.linalg.norm(vkpts[ikpt])**2
                 # plane-wave G-vectors
                 igvec = self.gvectors(ikpt+1)
                 # plane-wave G-vectors in Cartesian coordinate
                 rgvec = np.dot(igvec, self._Bcell * 2 * np.pi)
-                # | G + k |^2
-                gk2   = np.linalg.norm(rgvec, axis=1)**2 + k2
+
+                k   = vkpts[ikpt]                       # k
+                gk  = rgvec + k[np.newaxis,:]           # G + k
+                gk2 = np.linalg.norm(gk, axis=1)**2     # | G + k |^2
 
                 for iband in range(self._nbands):
                     # omit the empty bands
@@ -590,46 +590,46 @@ class vaspwfc():
                     rspin = 2.0 if self._nspin == 1 else 1.0
                     weight = rspin * kptw[ikpt] * self._occs[ispin, ikpt, iband]
 
-                    ########################################
-                    # slower
-                    ########################################
-                    # # wavefunction in real space
-                    # phi_r  = self.wfc_r(ispin=ispin+1, ikpt=ikpt+1,
-                    #                     iband=iband+1,
-                    #                     ngrid=ngrid,
-                    #                     norm=True) * normFac
-                    #
-                    # # wavefunction in reciprocal space
-                    # phi_q  = np.fft.fftn(phi_r, norm='ortho')
-                    #
-                    # # grad^2 \phi in reciprocal space
-                    # lap_phi_q = -(G2 + k2) * phi_q
-                    # # grad^2 \phi in real space
-                    # lap_phi_r = np.fft.ifftn(lap_phi_q, norm='ortho')
-
-                    ########################################
-                    # faster
-                    ########################################
-                    # wavefunction in reciprocal space
-                    # VASP does NOT do normalization in elf.F
-                    phi_q = self.readBandCoeff(ispin=ispin+1, ikpt=ikpt+1,
+                    if self._lgam:
+                        ########################################
+                        # slower
+                        ########################################
+                        # wavefunction in real space
+                        # VASP does NOT do normalization in elf.F
+                        phi_r  = self.wfc_r(ispin=ispin+1, ikpt=ikpt+1,
+                                            iband=iband+1,
+                                            ngrid=ngrid,
+                                            norm=False) * normFac
+                        # wavefunction in reciprocal space
+                        phi_q  = np.fft.fftn(phi_r, norm='ortho')
+                        # grad^2 \phi in reciprocal space
+                        lap_phi_q = -gk2 * phi_q
+                        # grad^2 \phi in real space
+                        lap_phi_r = np.fft.ifftn(lap_phi_q, norm='ortho')
+                    else:
+                        ########################################
+                        # faster
+                        ########################################
+                        # wavefunction in reciprocal space
+                        # VASP does NOT do normalization in elf.F
+                        phi_q = self.readBandCoeff(ispin=ispin+1, ikpt=ikpt+1,
+                                                   iband=iband+1,
+                                                   norm=False)
+                        # wavefunction in real space
+                        phi_r  = self.wfc_r(ispin=ispin+1, ikpt=ikpt+1,
+                                            iband=iband+1,
+                                            ngrid=ngrid,
+                                            gvec=igvec,
+                                            Cg=phi_q,
+                                            norm=True) * normFac
+                        # grad^2 \phi in reciprocal space
+                        lap_phi_q = -gk2 * phi_q
+                        # grad^2 \phi in real space
+                        lap_phi_r = self.wfc_r(ispin=ispin+1, ikpt=ikpt+1,
                                                iband=iband+1,
-                                               norm=False)
-                    # wavefunction in real space
-                    phi_r  = self.wfc_r(ispin=ispin+1, ikpt=ikpt+1,
-                                        iband=iband+1,
-                                        ngrid=ngrid,
-                                        gvec=igvec,
-                                        Cg=phi_q,
-                                        norm=True) * normFac
-                    # grad^2 \phi in reciprocal space
-                    lap_phi_q = -gk2 * phi_q
-                    # grad^2 \phi in real space
-                    lap_phi_r = self.wfc_r(ispin=ispin+1, ikpt=ikpt+1,
-                                           iband=iband+1,
-                                           ngrid=ngrid,
-                                           gvec=igvec,
-                                           Cg=lap_phi_q) * normFac
+                                               ngrid=ngrid,
+                                               gvec=igvec,
+                                               Cg=lap_phi_q) * normFac
 
                     # \phi* grad^2 \phi in real space --> kinetic energy density
                     tau += -phi_r * lap_phi_r.conj() * weight
@@ -637,7 +637,6 @@ class vaspwfc():
                     # charge density in real space
                     rho += phi_r.conj() * phi_r * weight
 
-            print rho.sum(), tau.sum() * HSQDTM
             # charge density in reciprocal space
             rho_q = np.fft.fftn(rho, norm='ortho')
 
@@ -646,9 +645,16 @@ class vaspwfc():
             lap_rho_r = np.fft.ifftn(lap_rho_q, norm='ortho')
 
             # charge density gradient: grad rho
+            ########################################
+            # wrong method for gradient using FFT 
+            ########################################
             # grad_rho_x = np.fft.ifft(1j * Gx * np.fft.fft(rho, axis=0), axis=0)
             # grad_rho_y = np.fft.ifft(1j * Gy * np.fft.fft(rho, axis=1), axis=1)
             # grad_rho_z = np.fft.ifft(1j * Gz * np.fft.fft(rho, axis=2), axis=2)
+
+            ########################################
+            # correct method for gradient using FFT 
+            ########################################
             grad_rho_x = np.fft.ifftn(1j * Gx * rho_q, norm='ortho')
             grad_rho_y = np.fft.ifftn(1j * Gy * rho_q, norm='ortho')
             grad_rho_z = np.fft.ifftn(1j * Gz * rho_q, norm='ortho')
@@ -663,14 +669,14 @@ class vaspwfc():
 
             Dh = np.where(rho > 0.0,
                           3./5 * (3.0 * np.pi**2)**(2./3) * rho**(5./3),
-                          0.0
-                          )
+                          0.0)
             Dh[Dh < 1E-8] = 1E-8
-
+            # D0 = T + TCORR - TBOS
             D0 = tau + 0.5 * lap_rho_r - 0.25 * grad_rho_sq / rho
-            chi.append(1. / (1. + (D0 / Dh)**2))
+
+            ElectronLocalizationFunction.append(1. / (1. + (D0 / Dh)**2))
         
-        return chi
+        return ElectronLocalizationFunction
 
 ############################################################
 
