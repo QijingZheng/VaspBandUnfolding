@@ -191,7 +191,7 @@ class vaspwfc():
             self._kpath = None
         return  self._kpath, self._bands
 
-    def gvectors(self, ikpt=1):
+    def gvectors(self, ikpt=1, force_Gamma=False, check_consistency=True):
         '''
         Generate the G-vectors that satisfies the following relation
             (G + k)**2 / 2 < ENCUT
@@ -207,7 +207,10 @@ class vaspwfc():
                 for jj in range(self._ngrid[1])]
         fz = [kk if kk < self._ngrid[2] / 2 + 1 else kk - self._ngrid[2]
                 for kk in range(self._ngrid[2])]
-        if self._lgam:
+
+        # force_Gamma: consider gamma-only case regardless of the real setting
+        lgam = True if force_Gamma else self._lgam
+        if lgam:
             # parallel gamma version of VASP WAVECAR exclude some planewave
             # components, -DwNGZHalf
             kgrid = np.array([(fx[ii], fy[jj], fz[kk])
@@ -233,13 +236,16 @@ class vaspwfc():
         # find Gvectors where (G + k)**2 / 2 < ENCUT
         Gvec = kgrid[np.where(KENERGY < self._encut)[0]]
 
-        if self._lsoc:
-                assert Gvec.shape[0] == self._nplws[ikpt - 1] / 2, \
-                       'No. of planewaves not consistent for an SOC WAVECAR! %d %d %d' % \
-                       (Gvec.shape[0], self._nplws[ikpt -1], np.prod(self._ngrid))
-        else:
-            assert Gvec.shape[0] == self._nplws[ikpt - 1], 'No. of planewaves not consistent! %d %d %d' % \
-                    (Gvec.shape[0], self._nplws[ikpt -1], np.prod(self._ngrid))
+        # Check if the calculated number of planewaves and the one recorded in the
+        # WAVECAR are equal
+        if check_consistency:
+            if self._lsoc:
+                    assert Gvec.shape[0] == self._nplws[ikpt - 1] / 2, \
+                           'No. of planewaves not consistent for an SOC WAVECAR! %d %d %d' % \
+                           (Gvec.shape[0], self._nplws[ikpt -1], np.prod(self._ngrid))
+            else:
+                assert Gvec.shape[0] == self._nplws[ikpt - 1], 'No. of planewaves not consistent! %d %d %d' % \
+                        (Gvec.shape[0], self._nplws[ikpt -1], np.prod(self._ngrid))
 
         return np.asarray(Gvec, dtype=int)
 
