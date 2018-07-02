@@ -582,6 +582,10 @@ class vaspwfc():
 
                 # plane-wave G-vectors
                 igvec = self.gvectors(ikpt+1)
+                # for gamma-only version, complete the missing -G vectors
+                if self._lgam:
+                    tmp   = np.array([-k for k in igvec[1:]], dtype=int)
+                    igvec = np.vstack([igvec, tmp])
                 # plane-wave G-vectors in Cartesian coordinate
                 rgvec = np.dot(igvec, self._Bcell * 2 * np.pi)
 
@@ -596,46 +600,51 @@ class vaspwfc():
                     rspin = 2.0 if self._nspin == 1 else 1.0
                     weight = rspin * kptw[ikpt] * self._occs[ispin, ikpt, iband]
 
-                    if self._lgam:
-                        ########################################
-                        # slower
-                        ########################################
-                        # wavefunction in real space
-                        # VASP does NOT do normalization in elf.F
-                        phi_r  = self.wfc_r(ispin=ispin+1, ikpt=ikpt+1,
-                                            iband=iband+1,
-                                            ngrid=ngrid,
-                                            norm=False) * normFac
-                        # wavefunction in reciprocal space
-                        phi_q  = np.fft.fftn(phi_r, norm='ortho')
-                        # grad^2 \phi in reciprocal space
-                        lap_phi_q = -gk2 * phi_q
-                        # grad^2 \phi in real space
-                        lap_phi_r = np.fft.ifftn(lap_phi_q, norm='ortho')
-                    else:
-                        ########################################
-                        # faster
-                        ########################################
-                        # wavefunction in reciprocal space
-                        # VASP does NOT do normalization in elf.F
-                        phi_q = self.readBandCoeff(ispin=ispin+1, ikpt=ikpt+1,
-                                                   iband=iband+1,
-                                                   norm=False)
-                        # wavefunction in real space
-                        phi_r  = self.wfc_r(ispin=ispin+1, ikpt=ikpt+1,
-                                            iband=iband+1,
-                                            ngrid=ngrid,
-                                            gvec=igvec,
-                                            Cg=phi_q,
-                                            norm=True) * normFac
-                        # grad^2 \phi in reciprocal space
-                        lap_phi_q = -gk2 * phi_q
-                        # grad^2 \phi in real space
-                        lap_phi_r = self.wfc_r(ispin=ispin+1, ikpt=ikpt+1,
+                    # if self._lgam:
+                    #     ########################################
+                    #     # slower
+                    #     ########################################
+                    #     # wavefunction in real space
+                    #     # VASP does NOT do normalization in elf.F
+                    #     phi_r  = self.wfc_r(ispin=ispin+1, ikpt=ikpt+1,
+                    #                         iband=iband+1,
+                    #                         ngrid=ngrid,
+                    #                         norm=False) * normFac
+                    #     # wavefunction in reciprocal space
+                    #     phi_q  = np.fft.fftn(phi_r, norm='ortho')
+                    #     # grad^2 \phi in reciprocal space
+                    #     lap_phi_q = -gk2 * phi_q
+                    #     # grad^2 \phi in real space
+                    #     lap_phi_r = np.fft.ifftn(lap_phi_q, norm='ortho')
+                    # else:
+
+                    ########################################
+                    # faster
+                    ########################################
+                    # wavefunction in reciprocal space
+                    # VASP does NOT do normalization in elf.F
+                    phi_q = self.readBandCoeff(ispin=ispin+1, ikpt=ikpt+1,
                                                iband=iband+1,
-                                               ngrid=ngrid,
-                                               gvec=igvec,
-                                               Cg=lap_phi_q) * normFac
+                                               norm=False)
+                    # pad the missing planewave coefficients for -G vectors
+                    if self._lgam:
+                        tmp   = [x.conj() for x in phi_q[1:]]
+                        phi_q = np.concatenate([phi_q, tmp])
+                    # wavefunction in real space
+                    phi_r  = self.wfc_r(ispin=ispin+1, ikpt=ikpt+1,
+                                        iband=iband+1,
+                                        ngrid=ngrid,
+                                        gvec=igvec,
+                                        Cg=phi_q,
+                                        norm=True) * normFac
+                    # grad^2 \phi in reciprocal space
+                    lap_phi_q = -gk2 * phi_q
+                    # grad^2 \phi in real space
+                    lap_phi_r = self.wfc_r(ispin=ispin+1, ikpt=ikpt+1,
+                                           iband=iband+1,
+                                           ngrid=ngrid,
+                                           gvec=igvec,
+                                           Cg=lap_phi_q) * normFac
 
                     # \phi* grad^2 \phi in real space --> kinetic energy density
                     tau += -phi_r * lap_phi_r.conj() * weight
