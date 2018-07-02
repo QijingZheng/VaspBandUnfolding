@@ -630,6 +630,10 @@ class vaspwfc():
                     if self._lgam:
                         tmp   = [x.conj() for x in phi_q[1:]]
                         phi_q = np.concatenate([phi_q, tmp])
+                        # Gamma only, divide a factor of sqrt(2.0) except for
+                        # G=0
+                        phi_q    /= np.sqrt(2.0)
+                        phi_q[0] *= np.sqrt(2.0)
                     # wavefunction in real space
                     phi_r  = self.wfc_r(ispin=ispin+1, ikpt=ikpt+1,
                                         iband=iband+1,
