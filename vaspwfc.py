@@ -686,10 +686,12 @@ class vaspwfc():
             tau = tau.real
             lap_rho_r = lap_rho_r.real
 
+            Cf  = 3./5 * (3.0 * np.pi**2)**(2./3)
             Dh = np.where(rho > 0.0,
-                          3./5 * (3.0 * np.pi**2)**(2./3) * rho**(5./3),
+                          Cf * rho**(5./3),
                           0.0)
-            Dh[Dh < 1E-8] = 1E-8
+            eps = 1E-8 / HSQDTM
+            Dh[Dh < eps] = eps
             # D0 = T + TCORR - TBOS
             D0 = tau + 0.5 * lap_rho_r - 0.25 * grad_rho_sq / rho
 
