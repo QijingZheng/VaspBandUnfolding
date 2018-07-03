@@ -41,8 +41,8 @@ multielectronic systems. (from wiki)
 * http://www2.cpfs.mpg.de/ELF/index.php?content=06interpr.txt
 
 NOTE that if you are using VESTA to view the resulting ELF file, please rename
-the output file as ELFCAR, otherwise there will be some error in the isosurface
-plot!  DOES NOT KNOW WHY! Maybe has something to with VESTA!
+the output file as "ELFCAR", otherwise there will be some error in the isosurface
+plot! 
 
 ## Band unfolding
 
