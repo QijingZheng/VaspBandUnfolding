@@ -538,7 +538,7 @@ class vaspwfc():
             If you are using VESTA to view the resulting ELF, please rename the
             output file as ELFCAR, otherwise there will be some error in the
             isosurface plot! 
-                 DOES NOT KNOW WHY! Maybe has something to with VESTA!
+                  DOES NOT KNOW WHY! Maybe has something to do with VESTA!
             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             """
 
