@@ -587,12 +587,17 @@ class vaspwfc():
         # \sum_{ijk} | \phi_{ijk} | ^ 2 * volume / Ngrid = 1
         normFac = np.sqrt(np.prod(ngrid) / self._Omega)
 
+        # electron localization function
         ElectronLocalizationFunction = []
+        # Charge density
+        rho = np.zeros(ngrid, dtype=complex)
+        # Kinetic energy density
+        tau = np.zeros(ngrid, dtype=complex)
+
         for ispin in range(self._nspin):
-            # Charge density
-            rho = np.zeros((ngrid[0], ngrid[1], ngrid[2]), dtype=complex)
-            # Kinetic energy density
-            tau = np.zeros((ngrid[0], ngrid[1], ngrid[2]), dtype=complex)
+            # initialization
+            rho[...] = 0.0
+            tau[...] = 0.0
 
             for ikpt in range(self._nkpts):
 
