@@ -41,8 +41,11 @@ multielectronic systems. (from wiki)
 * http://www2.cpfs.mpg.de/ELF/index.php?content=06interpr.txt
 
 NOTE that if you are using VESTA to view the resulting ELF file, please rename
-the output file as "ELFCAR", otherwise there will be some error in the isosurface
-plot! 
+the output file as "ELFCAR", otherwise there will be some error in the
+isosurface plot!  When VESTA read in CHG*/PARCHG/*.vasp to visualize isosurfaces
+and sections, data values are divided by volume in the unit of bohr^3.  The unit
+of charge densities input by VESTA is, therefore, bohr^−3.  For LOCPOT/ELFCAR
+files, volume data are kept intact.
 
 ## Band unfolding
 

@@ -534,12 +534,20 @@ class vaspwfc():
 
         if warn:
             print """
-            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            ###################################################################
             If you are using VESTA to view the resulting ELF, please rename the
             output file as ELFCAR, otherwise there will be some error in the
-            isosurface plot! 
-                  DOES NOT KNOW WHY! Maybe has something to do with VESTA!
-            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            isosurface plot!
+
+            When CHG*/PARCHG/*.vasp are read in to visualize isosurfaces and
+            sections, data values are divided by volume in the unit of bohr^3.
+            The unit of charge densities input by VESTA is, therefore, bohr^−3.
+
+            For LOCPOT/ELFCAR files, volume data are kept intact.
+
+            You can turn off this warning by setting "warn=False" in the "elf"
+            method.
+            ###################################################################
             """
 
         # the k-point weights
