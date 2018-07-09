@@ -52,7 +52,7 @@ def save2vesta(phi=None, poscar='POSCAR', prefix='wfc',
 This program is based on the code written by Ren Hao <renh@upc.edu.cn>.
 '''
 
-class vaspwfc():
+class vaspwfc(object):
     '''
     Class for VASP Pseudowavefunction stored in WAVECAR
 
@@ -108,6 +108,12 @@ class vaspwfc():
         Is the WAVECAR from an SOC calculation?
         """
         return True if self._lsoc else False
+
+    def isGammaWfc(self):
+        """
+        Is the WAVECAR from an SOC calculation?
+        """
+        return True if self._lgam else False
 
     def readWFHeader(self):
         '''
