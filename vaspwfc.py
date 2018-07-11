@@ -48,13 +48,11 @@ def save2vesta(phi=None, poscar='POSCAR', prefix='wfc',
                             out.write('\n')
 
 ############################################################
-'''
-This program is based on the code written by Ren Hao <renh@upc.edu.cn>.
-'''
 
 class vaspwfc(object):
     '''
-    Class for VASP Pseudowavefunction stored in WAVECAR
+    Class for processing VASP Pseudowavefunction stored in WAVECAR.  This
+    program is motivated by PIESTA written by Ren Hao <renh@upc.edu.cn>.
 
     The format of VASP WAVECAR, as shown in
         http://www.andrew.cmu.edu/user/feenstra/wavetrans/
@@ -433,13 +431,18 @@ class vaspwfc(object):
         '''
         calculate Transition Dipole Moment between two KS states.
         TDM in momentum representation
-                                             ___              
-                                   i⋅h       ╲                
-        <psi_a| r | psi_b> =    --------- ⋅   ╲   Cai⋅Cbi⋅Gi
-                                 Eb - Ea      ╱               
-                                             ╱                
-                                             ‾‾‾              
-                                              i               
+
+                                    i⋅h
+        <psi_a | r | psi_b> =  -------------- ⋅ <psi_a | p | psi_b>
+                                m⋅(Eb - Ea)
+
+                                      2        ____              
+                                     h          ╲                
+                            =  ------------- ⋅   ╲   Cai⋅Cbi⋅Gi
+                                m⋅(Eb - Ea)      ╱               
+                                                ╱                
+                                               ‾‾‾‾              
+                                                 i               
         Note: |psi_a> and |psi_b> should be bloch function with 
               the same k vector.
 
@@ -465,6 +468,7 @@ class vaspwfc(object):
         ovlap = np.sum(tmp1)
         if self._lgam:
             tmp2 = phi_i * phi_j.conjugate()
+            # according to the above equation, G = 0 does NOT contribute to TDM.
             tdm = (np.sum(tmp1[:,np.newaxis] * gvec, axis=0) -
                    np.sum(tmp2[:,np.newaxis] * gvec, axis=0)) / 2.
         else:
