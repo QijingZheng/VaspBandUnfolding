@@ -184,7 +184,8 @@ class procar(object):
         self._sigma = sigma
 
         # re-generate the DOS with the new SIGMA
-        self.init_dos()
+        if self._tdos is not None:
+            self.init_dos()
 
     def get_nedos(self): return self._nedos
     def set_nedos(self, nedos):
@@ -195,7 +196,8 @@ class procar(object):
         self._nedos = nedos
 
         # re-generate the DOS with the new NEDOS
-        self.init_dos()
+        if self._tdos is not None:
+            self.init_dos()
 
     def get_kpts_weight(self):
         '''
@@ -211,7 +213,8 @@ class procar(object):
         self._kptw = kptw
 
         # re-generate the DOS with the new kptw
-        self.init_dos()
+        if self._tdos is not None:
+            self.init_dos()
     def restore_kpts_weight(self, kptw):
         '''
         set the k-points weights

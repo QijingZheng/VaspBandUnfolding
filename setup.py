@@ -10,5 +10,5 @@ setup(
     author_email    = 'zqj.kaka@gmail.com',
     url             = 'https://github.com/QijingZheng/VaspBandUnfolding',
     # packages        = ['pyvaspwfc',],
-    py_modules      = ['vasp_constant', 'vaspwfc', 'nac', 'unfold']
+    py_modules      = ['vasp_constant', 'vaspwfc', 'nac', 'unfold', 'procar']
 )
