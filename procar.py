@@ -47,6 +47,8 @@ def gradient_fill(x, y, fill_color=None, ax=None, direction=1, **kwargs):
         The transparent gradient clipped to just the area beneath the curve.
     """
 
+    import matplotlib.colors as mcolors
+
     line, = ax.plot(x, y, **kwargs)
     if fill_color is None:
         fill_color = line.get_color()
