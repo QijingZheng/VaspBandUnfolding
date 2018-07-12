@@ -15,7 +15,7 @@ def gaussian_smearing_org(x, x0, sigma=0.05):
 
 def string2index(string):
     if ':' not in string:
-        raise ValueError("Invalid index string!")
+        raise ValueError("Invalid slice string!")
     i = []
     for s in string.split(':'):
         if s == '':
