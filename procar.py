@@ -106,7 +106,10 @@ class procar(object):
         # parameters usefull for dos generation
         self._sigma  = 0.05
         self._nedos  = 3000
+        # Total DOS for each KS energy, with shape (NSPIN, NKPTS, NBANDS, NEDOS)
         self._tdos   = None
+        # Total DOS with shape (NSPIN, NEDOS)
+        self._totalDOS = None
 
         self._spd_index = {
             's' : 0,
@@ -132,6 +135,8 @@ class procar(object):
                                   dtype=float)
         # k-points weights of each k-points
         self._kptw = np.asarray([line.split()[-1] for line in inp if 'weight' in line], dtype=float)
+        # k-points vectors of each k-points
+        self._kptv = np.asarray([line.split()[-6:-3] for line in inp if 'weight' in line], dtype=float)
         # band energies
         self._eband = np.asarray([line.split()[-4] for line in inp
                                   if 'occ.' in line], dtype=float)
@@ -187,7 +192,8 @@ class procar(object):
 
         # re-generate the DOS with the new SIGMA
         if self._tdos is not None:
-            self.init_dos()
+            if not np.isclose(sigma, self._sigma):
+                self.init_dos()
 
     def get_nedos(self): return self._nedos
     def set_nedos(self, nedos):
@@ -199,7 +205,8 @@ class procar(object):
 
         # re-generate the DOS with the new NEDOS
         if self._tdos is not None:
-            self.init_dos()
+            if self._nedos != nedos:
+                self.init_dos()
 
     def get_kpts_weight(self):
         '''
@@ -224,7 +231,8 @@ class procar(object):
         self._kptw = self._kptw_org.copy()
 
         # re-generate the DOS with the new kptw
-        self.init_dos()
+        if self._tdos is not None:
+            self.init_dos()
 
     def init_dos(self):
         '''
@@ -248,6 +256,57 @@ class procar(object):
                     x0 = self._eband[ispin, ikpt, iband]
                     self._tdos[ispin, ikpt, iband] = sign * self._kptw[ispin,ikpt] \
                               * gaussian_smearing_org(self._xen, x0, self._sigma)\
+
+    def translate_selection(self, atoms=':', kpts=':', spd=':'):
+        '''
+        '''
+        # string is Iterable too
+        assert (isinstance(atoms, int) 
+             or isinstance(atoms, Iterable)
+             or isinstance(atoms, str))
+        assert (isinstance(kpts, int) 
+             or isinstance(kpts, Iterable)
+             or isinstance(kpts, str))
+        assert (isinstance(spd, int) 
+             or isinstance(spd, Iterable) 
+             or isinstance(kpts, str))
+
+        if isinstance(atoms, str):
+            atoms = string2index(atoms)
+        if isinstance(kpts, str):
+            kpts = string2index(kpts)
+        if isinstance(spd, str):
+            spd = string2index(spd)
+
+        # remove duplicate selections
+        if isinstance(atoms, Iterable):
+            atoms = list(set(atoms))
+        if isinstance(kpts, Iterable):
+            kpts = list(set(kpts))
+        if isinstance(spd, Iterable):
+            spd = [ii if isinstance(ii, int) else self._spd_index[ii]
+                   for ii in spd]
+            spd = list(set(spd))
+
+        return atoms, kpts, spd
+
+    def get_proj(self):
+        '''
+        get the partial weight.
+        '''
+        return self._aproj.copy()
+    
+    def get_total_dos(self):
+        '''
+        The total DOS
+        '''
+        if self._tdos is None:
+            self.init_dos()
+
+        if self._totalDOS is None:
+            self._totalDOS = np.sum(self._tdos, axis=(1, 2))
+
+        return self._xen, self._totalDOS
 
     def get_pdos(self, atoms=':', kpts=':', spd=':'):
         '''
@@ -283,25 +342,7 @@ class procar(object):
         if self._tdos is None:
             self.init_dos()
 
-        assert (isinstance(atoms, int) 
-             or isinstance(atoms, Iterable)
-             or isinstance(atoms, str))
-        assert (isinstance(kpts, int) 
-             or isinstance(kpts, Iterable)
-             or isinstance(kpts, str))
-        assert (isinstance(spd, int) 
-             or isinstance(spd, Iterable) 
-             or isinstance(kpts, str))
-
-        if isinstance(atoms, str):
-            atoms = string2index(atoms)
-        if isinstance(kpts, str):
-            kpts = string2index(kpts)
-        if isinstance(spd, str):
-            spd = string2index(spd)
-        if isinstance(spd, Iterable):
-            spd = [ii if isinstance(ii, int) else self._spd_index[ii]
-                   for ii in spd]
+        atoms, kpts, spd = self.translate_selection(atoms, kpts, spd)
 
         # problem with mixed advanced indexing and basic indexing, see scipy
         # documents for reference
@@ -317,6 +358,13 @@ class procar(object):
         # arr[[0, 1], 0, :] has shape (2, Z).
         # arr[0, :, [0, 1]] has shape (2, Y), not (Y, 2)
 
+        if np.alltrue(
+                np.sort(np.arange(self._nkpts)[kpts]) == np.arange(self._nkpts)
+            ):
+            used_all_kpts = True
+        else:
+            used_all_kpts = False 
+
         pdos = []
         for ispin in range(self._nspin):
             # Avoid mixed indexing
@@ -326,7 +374,12 @@ class procar(object):
             # sum over the site projection
             pw = np.sum(pw[..., atoms], axis=-1)
 
-            td = self._tdos[ispin, kpts]
+            if used_all_kpts:
+                td = self._tdos[ispin, kpts]
+            else:
+                # if not all the k-points are used, then probably we should get
+                # rid of the k-point weights
+                td = self._tdos[ispin, kpts,...] / self._kptw[kpts, np.newaxis, np.newaxis]
 
             pdos.append(np.sum(pw[...,np.newaxis] * td, axis=(0, 1)))
 
@@ -334,10 +387,10 @@ class procar(object):
             # pdos.append(np.sum(pwht[..., np.newaxis] * self._tdos[ispin][kpts,...], axis=(0, 1)))
 
         # only return one dos if not spin-polarized
-        p = pdos[0] if self._nspin == 1 else pdos
+        # p = pdos[0] if self._nspin == 1 else pdos
+        pdos = np.array(pdos, dtype=float)
 
-        return self._xen, p
-
+        return self._xen, pdos
 
 if __name__ == '__main__':
     import matplotlib as mpl
