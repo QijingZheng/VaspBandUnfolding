@@ -176,6 +176,12 @@ class procar(object):
         '''
         return self._nbands
 
+    def get_band_energies(self):
+        '''
+        Return the band energies
+        '''
+        return self._eband.copy()
+
     def isSoc(self):
         return True if self._lsoc else False
 
@@ -308,9 +314,9 @@ class procar(object):
 
         return self._xen, self._totalDOS
 
-    def get_pdos(self, atoms=':', kpts=':', spd=':'):
+    def get_pw(self, atoms=':', kpts=':', spd=':'):
         '''
-        Get site/k-points/spd-orbital projected partial density of states (PDOS)
+        Get site/k-points/spd-orbital projected weight for each KS orbital.
 
         atoms : selected atoms index.
                 Valid values:
@@ -339,8 +345,6 @@ class procar(object):
                     ['s', 'py'] -> s/p/d-orbitals specified by list of names
                     0           -> s/p/d-orbitals indices specified by integer
         '''
-        if self._tdos is None:
-            self.init_dos()
 
         atoms, kpts, spd = self.translate_selection(atoms, kpts, spd)
 
@@ -358,6 +362,31 @@ class procar(object):
         # arr[[0, 1], 0, :] has shape (2, Z).
         # arr[0, :, [0, 1]] has shape (2, Y), not (Y, 2)
 
+        pw = []
+        for ispin in range(self._nspin):
+            p0 = self._aproj[ispin, kpts]
+            # sum over the s/p/d projection
+            p0 = np.sum(p0[..., spd],   axis=-1)
+            # sum over the site projection
+            p0 = np.sum(p0[..., atoms], axis=-1)
+
+            pw.append(p0)
+
+        return np.array(pw, dtype=float)
+
+    def get_pdos(self, atoms=':', kpts=':', spd=':'):
+        '''
+        Get site/k-points/spd-orbital projected partial density of states (PDOS)
+        '''
+
+        if self._tdos is None:
+            self.init_dos()
+
+        pdos = []
+        proj = self.get_pw(atoms, kpts, spd)
+
+        atoms, kpts, spd = self.translate_selection(atoms, kpts, spd)
+
         if np.alltrue(
                 np.sort(np.arange(self._nkpts)[kpts]) == np.arange(self._nkpts)
             ):
@@ -365,14 +394,8 @@ class procar(object):
         else:
             used_all_kpts = False 
 
-        pdos = []
         for ispin in range(self._nspin):
-            # Avoid mixed indexing
-            pw = self._aproj[ispin, kpts]
-            # sum over the s/p/d projection
-            pw = np.sum(pw[..., spd],   axis=-1)
-            # sum over the site projection
-            pw = np.sum(pw[..., atoms], axis=-1)
+            pw = proj[ispin]
 
             if used_all_kpts:
                 td = self._tdos[ispin, kpts]
@@ -393,24 +416,26 @@ class procar(object):
         return self._xen, pdos
 
 if __name__ == '__main__':
-    import matplotlib as mpl
-    import matplotlib.pyplot as plt
+    # import matplotlib as mpl
+    # import matplotlib.pyplot as plt
+    #
+    # xx = procar()
+    # # total dos
+    # x0, y0 = xx.get_pdos()
+    # # site projected DOS
+    # x1, y1 = xx.get_pdos(atoms=[192, 209])
+    # # site projected DOS + s/p/d projected DOS
+    # xx.set_nedos(1000)
+    # x2, y2 = xx.get_pdos(atoms='0::2', spd=['dz2', 'dx2'])
+    #
+    # fig, ax = plt.subplots()
+    # fig.set_size_inches((4.0, 3.0))
+    #
+    # ax.plot(x0, y0[0], color='r')
+    # ax.plot(x1, y1[0], color='g')
+    # ax.plot(x2, y2[0], color='b')
+    #
+    # plt.show()
 
     xx = procar()
-    # total dos
-    x0, y0 = xx.get_pdos()
-    # site projected DOS
-    x1, y1 = xx.get_pdos(atoms=[192, 209])
-    # site projected DOS + s/p/d projected DOS
-    xx.set_nedos(1000)
-    x2, y2 = xx.get_pdos(atoms='0::2', spd=['dz2', 'dx2'])
-
-    fig, ax = plt.subplots()
-    fig.set_size_inches((4.0, 3.0))
-
-    ax.plot(x0, y0, color='r')
-    ax.plot(x1, y1, color='g')
-    ax.plot(x2, y2, color='b')
-
-    plt.show()
-
+    b0 = xx.get_band_energies()
