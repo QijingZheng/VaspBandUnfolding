@@ -320,7 +320,7 @@ class vaspwfc(object):
         self.checkIndex(ispin, ikpt, iband)
 
         if ngrid is None:
-            ngrid = self._ngrid.copy()
+            ngrid = self._ngrid.copy() * 2
         else:
             ngrid = np.array(ngrid, dtype=int)
             assert ngrid.shape == (3,)
