@@ -48,6 +48,7 @@ def gradient_fill(x, y, fill_color=None, ax=None, direction=1, **kwargs):
     """
 
     import matplotlib.colors as mcolors
+    from matplotlib.patches import Polygon
 
     line, = ax.plot(x, y, **kwargs)
     if fill_color is None:
