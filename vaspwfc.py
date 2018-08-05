@@ -77,7 +77,8 @@ class vaspwfc(object):
         End loop over spin
     '''
 
-    def __init__(self, fnm='WAVECAR', lsorbit=False, lgamma=False):
+    def __init__(self, fnm='WAVECAR', lsorbit=False, lgamma=False,
+                 gamma_half='z'):
         '''
         Initialization.
         '''
@@ -85,8 +86,11 @@ class vaspwfc(object):
         self._fname = fnm
         self._lsoc  = lsorbit
         self._lgam  = lgamma
+        self._gam_half = gamma_half.lower()
 
         assert not (lsorbit and lgamma), 'The two settings conflict!'
+        assert self._gam_half == 'x' or self._gam_half == 'z', \
+               'Gamma_half must be "x" or "z"'
 
         try:
             self._wfc = open(self._fname, 'rb')
@@ -217,15 +221,26 @@ class vaspwfc(object):
         if lgam:
             # parallel gamma version of VASP WAVECAR exclude some planewave
             # components, -DwNGZHalf
-            kgrid = np.array([(fx[ii], fy[jj], fz[kk])
-                              for kk in range(self._ngrid[2])
-                              for jj in range(self._ngrid[1])
-                              for ii in range(self._ngrid[0])
-                              if (
-                                  (fz[kk] > 0) or
-                                  (fz[kk] == 0 and fy[jj] > 0) or
-                                  (fz[kk] == 0 and fy[jj] == 0 and fx[ii] >= 0)
-                              )], dtype=float)
+            if self._gam_half == 'z':
+                kgrid = np.array([(fx[ii], fy[jj], fz[kk])
+                                  for kk in range(self._ngrid[2])
+                                  for jj in range(self._ngrid[1])
+                                  for ii in range(self._ngrid[0])
+                                  if (
+                                      (fz[kk] > 0) or
+                                      (fz[kk] == 0 and fy[jj] > 0) or
+                                      (fz[kk] == 0 and fy[jj] == 0 and fx[ii] >= 0)
+                                  )], dtype=float)
+            else self._gam_half == 'x':
+                kgrid = np.array([(fx[ii], fy[jj], fz[kk])
+                                  for kk in range(self._ngrid[2])
+                                  for jj in range(self._ngrid[1])
+                                  for ii in range(self._ngrid[0])
+                                  if (
+                                      (fx[ii] > 0) or
+                                      (fx[ii] == 0 and fy[jj] > 0) or
+                                      (fx[ii] == 0 and fy[jj] == 0 and fz[kk] >= 0)
+                                  )], dtype=float)
         else:
             kgrid = np.array([(fx[ii], fy[jj], fz[kk])
                               for kk in range(self._ngrid[2])
@@ -342,7 +357,10 @@ class vaspwfc(object):
             gvec = self.gvectors(ikpt)
 
         if self._lgam:
-            phi_k = np.zeros((ngrid[0], ngrid[1], ngrid[2]/2 + 1), dtype=np.complex128)
+            if self._gam_half == 'z':
+                phi_k = np.zeros((ngrid[0], ngrid[1], ngrid[2]/2 + 1), dtype=np.complex128)
+            else self._gam_half == 'x':
+                phi_k = np.zeros((ngrid[0]/2 + 1, ngrid[1], ngrid[2]), dtype=np.complex128)
         else:
             phi_k = np.zeros(ngrid, dtype=np.complex128)
 
@@ -375,16 +393,32 @@ class vaspwfc(object):
 
             if self._lgam:
                 # add some components that are excluded and perform c2r FFT
-                for ii in range(ngrid[0]):
+                if self._gam_half == 'z':
+                    for ii in range(ngrid[0]):
+                        for jj in range(ngrid[1]):
+                            fx = ii if ii < ngrid[0] / 2 + 1 else ii - ngrid[0]
+                            fy = jj if jj < ngrid[1] / 2 + 1 else jj - ngrid[1]
+                            if (fy > 0) or (fy == 0 and fx >= 0):
+                                continue
+                            phi_k[ii,jj,0] = phi_k[-ii,-jj,0].conjugate()
+
+                    phi_k /= np.sqrt(2.)
+                    phi_k[0,0,0] *= np.sqrt(2.)
+                    return np.fft.irfftn(phi_k, s=ngrid) * normFac
+                elif self._gam_half == 'x':
                     for jj in range(ngrid[1]):
-                        fx = kk if kk < ngrid[0] / 2 + 1 else kk - ngrid[0]
-                        fy = kk if kk < ngrid[1] / 2 + 1 else kk - ngrid[1]
-                        if (fy > 0) or (fy == 0 and fx >= 0):
-                            continue
-                        phi_k[ii,jj,0] = phi_k[-ii,-jj,0].conjugate()
-                phi_k /= np.sqrt(2.)
-                phi_k[0,0,0] *= np.sqrt(2.)
-                return np.fft.irfftn(phi_k, s=ngrid) * normFac
+                        for kk in range(ngrid[2]):
+                            fy = jj if jj < ngrid[1] / 2 + 1 else jj - ngrid[1]
+                            fz = kk if kk < ngrid[2] / 2 + 1 else kk - ngrid[2]
+                            if (fy > 0) or (fy == 0 and fz >= 0):
+                                continue
+                            phi_k[0,jj,kk] = phi_k[0,-jj,-kk].conjugate()
+
+                    phi_k /= np.sqrt(2.)
+                    phi_k[0,0,0] *= np.sqrt(2.)
+                    phi_k = np.swapaxes(phi_k, 0, 2)
+                    tmp =  np.fft.irfftn(phi_k, s=ngrid) * normFac
+                    return np.swapaxes(tmp, 0, 2)
             else:
                 # perform complex2complex FFT
                 return ifftn(phi_k * normFac)
@@ -801,12 +835,16 @@ if __name__ == '__main__':
     #
     # plt.show()
 
-    xx = vaspwfc('examples/wfc_r/wavecar_mose2-wse2', lsorbit=True)
-    phi_spinor = xx.wfc_r(1, 1, 36, ngrid=xx._ngrid*2)
-    for ii in range(2):
-        phi = phi_spinor[ii]
-        prefix = 'spinor_{:02d}'.format(ii)
-        xx.save2vesta(phi, prefix=prefix,
-                poscar='examples/wfc_r/poscar_mose2-wse2')
+    wfc = vaspwfc('WAVECAR', lgamma=True, gamma_half='x')
+    # ngrid = [80, 140, 210]
+    phi = wfc.wfc_r(iband=190)
+
+    rho = np.abs(phi)**2
+    # rho2 = VaspChargeDensity('PARCHG.0158.ALLK').chg[0]
+    # rho /= rho.sum()
+    # rho2 /= rho2.sum()
+    # rho3 = rho - rho2
+
+    wfc.save2vesta(rho, lreal=True)
 
     pass

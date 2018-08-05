@@ -227,7 +227,8 @@ class unfold():
     Phys. Rev. B 85, 085201 (2012)
     '''
 
-    def __init__(self, M=None, wavecar='WAVECAR', gamma=False, lsorbit=False):
+    def __init__(self, M=None, wavecar='WAVECAR', gamma=False, lsorbit=False,
+                 gamma_half='z'):
         '''
         Initialization.
 
@@ -255,7 +256,8 @@ class unfold():
         self.M = np.array(M, dtype=float)
         assert self.M.shape == (3,3), 'Shape of the tranformation matrix must be (3,3)'
 
-        self.wfc = vaspwfc(wavecar, lsorbit=self._lsoc, lgamma=self._lgam)
+        self.wfc = vaspwfc(wavecar, lsorbit=self._lsoc, lgamma=self._lgam,
+                           gamma_half=gamma_half)
         # all the K-point vectors
         self.kvecs = self.wfc._kvecs
         # all the KS energies
