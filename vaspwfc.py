@@ -495,8 +495,9 @@ class vaspwfc(object):
         phi_i = self.readBandCoeff(*ks_i, norm=norm)
         phi_j = self.readBandCoeff(*ks_j, norm=norm)
         # energy differences between the two states
-        dE = self._bands[ks_j[0]-1, ks_j[1]-1, ks_j[2]-1] - \
-             self._bands[ks_i[0]-1, ks_i[1]-1, ks_i[2]-1]
+        E1 = self._bands[ks_i[0]-1, ks_i[1]-1, ks_i[2]-1]
+        E2 = self._bands[ks_j[0]-1, ks_j[1]-1, ks_j[2]-1]
+        dE = E2 - E1
 
         tmp1 = phi_i.conjugate() * phi_j
         ovlap = np.sum(tmp1)
@@ -510,7 +511,7 @@ class vaspwfc(object):
 
         tdm = 1j / (dE / (2*RYTOEV)) * tdm * AUTOA * AUTDEBYE
 
-        return dE, ovlap, tdm
+        return E1, E2, dE, ovlap, tdm
 
     def inverse_participation_ratio(self, norm=True):
         '''
