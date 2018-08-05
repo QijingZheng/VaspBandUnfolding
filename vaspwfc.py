@@ -377,8 +377,8 @@ class vaspwfc(object):
                 # add some components that are excluded and perform c2r FFT
                 for ii in range(ngrid[0]):
                     for jj in range(ngrid[1]):
-                        fx = ii if ii < ngrid[0] / 2 + 1 else ii - ngrid[0]
-                        fy = ii if ii < ngrid[1] / 2 + 1 else ii - ngrid[1]
+                        fx = kk if kk < ngrid[0] / 2 + 1 else kk - ngrid[0]
+                        fy = kk if kk < ngrid[1] / 2 + 1 else kk - ngrid[1]
                         if (fy > 0) or (fy == 0 and fx >= 0):
                             continue
                         phi_k[ii,jj,0] = phi_k[-ii,-jj,0].conjugate()
