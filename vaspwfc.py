@@ -231,7 +231,7 @@ class vaspwfc(object):
                                       (fz[kk] == 0 and fy[jj] > 0) or
                                       (fz[kk] == 0 and fy[jj] == 0 and fx[ii] >= 0)
                                   )], dtype=float)
-            else self._gam_half == 'x':
+            else:
                 kgrid = np.array([(fx[ii], fy[jj], fz[kk])
                                   for kk in range(self._ngrid[2])
                                   for jj in range(self._ngrid[1])
@@ -359,7 +359,7 @@ class vaspwfc(object):
         if self._lgam:
             if self._gam_half == 'z':
                 phi_k = np.zeros((ngrid[0], ngrid[1], ngrid[2]/2 + 1), dtype=np.complex128)
-            else self._gam_half == 'x':
+            else:
                 phi_k = np.zeros((ngrid[0]/2 + 1, ngrid[1], ngrid[2]), dtype=np.complex128)
         else:
             phi_k = np.zeros(ngrid, dtype=np.complex128)
