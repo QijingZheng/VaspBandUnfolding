@@ -95,6 +95,11 @@ class procar(object):
         '''
 
         self._fname  = inf
+        # the directory containing the input file
+        self._dname  = os.path.dirname(inf)
+        if self._dname == '':
+            self._dname = '.'
+
         self._lsoc   = lsoc
 
         try:
@@ -117,6 +122,10 @@ class procar(object):
             'py' : 1, 'pz' : 2, 'px' : 3,
             'dxy' : 4, 'dyz' : 5, 'dz2' : 6, 'dxz' : 7, 'dx2' : 8
         }
+
+        # the basis vectors of the cell
+        self._cell  = None
+        self._kpath = None
 
     def readProcar(self):
         '''
@@ -183,6 +192,55 @@ class procar(object):
         '''
         return self._eband.copy()
 
+    def get_kpath(self, cell=None, nkseg=None):
+        '''
+        Construct k-point path, find out the k-path boundary if possible.
+        '''
+
+        if self._kpath is None:
+            if self._cell is None:
+                if cell is None:
+                    try:
+                        self._cell = read(self._dname + '/POSCAR', format='vasp').cell.copy()
+                    except:
+                        raise ValueError('Error in reading cell info from POSCAR!')
+                else:
+                    self._cell = np.array(cell, dtype=float)
+                    assert self._cell.shape == (3,3)
+
+            if nkseg is None:
+                if os.path.isfile(self._dname + "/KPOINTS"):
+                    kfile = open(self._dname + "/KPOINTS").readlines()
+                    if kfile[2][0].upper() == 'L':
+                        nkseg = int(kfile[1].split()[0])
+                    else:
+                        raise ValueError('Error reading number of k-points from KPOINTS')
+
+            assert isinstance(nkseg, int) and nkseg > 0
+
+            nsec  = self._nkpts // nkseg
+            icell = np.linalg.inv(self._cell).T
+
+            # vkpts_d = np.diff(self._kptv, axis=0)
+            # self._kpath     = np.zeros(self._nkpts, dtype=float)
+            # self._kpath[1:] = np.cumsum(np.linalg.norm(np.dot(vkpts_d, icell), axis=1))
+
+            v = self._kptv.copy()
+            for ii in range(nsec):
+                ki = ii * nkseg
+                kj = (ii + 1) * nkseg
+                v[ki:kj,:] -= v[ki]
+
+            self._kpath = np.linalg.norm(np.dot(v, icell), axis=1)
+            for ii in range(1, nsec):
+                ki = ii * nkseg
+                kj = (ii + 1) * nkseg
+                self._kpath[ki:kj] += self._kpath[ki - 1]
+
+            self._kbound =  np.concatenate((self._kpath[0::nkseg], [self._kpath[-1],]))
+
+        return self._kpath, self._kbound
+
     def isSoc(self):
         return True if self._lsoc else False
 
@@ -205,7 +263,7 @@ class procar(object):
     def get_nedos(self): return self._nedos
     def set_nedos(self, nedos):
         '''
-        set number of point in smooth DOS 
+        set number of point in smooth DOS
         '''
         assert isinstance(nedos, int), 'NEDOS shoule be int!'
         self._nedos = nedos
@@ -268,14 +326,14 @@ class procar(object):
         '''
         '''
         # string is Iterable too
-        assert (isinstance(atoms, int) 
+        assert (isinstance(atoms, int)
              or isinstance(atoms, Iterable)
              or isinstance(atoms, str))
-        assert (isinstance(kpts, int) 
+        assert (isinstance(kpts, int)
              or isinstance(kpts, Iterable)
              or isinstance(kpts, str))
-        assert (isinstance(spd, int) 
-             or isinstance(spd, Iterable) 
+        assert (isinstance(spd, int)
+             or isinstance(spd, Iterable)
              or isinstance(kpts, str))
 
         if isinstance(atoms, str):
@@ -302,7 +360,7 @@ class procar(object):
         get the partial weight.
         '''
         return self._aproj.copy()
-    
+
     def get_total_dos(self):
         '''
         The total DOS
@@ -341,7 +399,7 @@ class procar(object):
 
                 Valid values:
                     ":"         -> for all s/p/d-orbitals
-                    "0::2"      -> for even index 
+                    "0::2"      -> for even index
                     [0, 1, 2]   -> s/p/d-orbitals specified by list of integer
                     ['s', 'py'] -> s/p/d-orbitals specified by list of names
                     0           -> s/p/d-orbitals indices specified by integer
@@ -352,7 +410,7 @@ class procar(object):
         # problem with mixed advanced indexing and basic indexing, see scipy
         # documents for reference
         # https://docs.scipy.org/doc/numpy/reference/arrays.indexing.html#combining-advanced-and-basic-indexing
-        # 
+        #
         # a=np.zeros((2,3,4)); b=np.ones((3,4)); I=np.array([0,1])
         # b[:,I].shape = (3, 2)
         # a[0,:,I].shape = (2, 3)
@@ -393,7 +451,7 @@ class procar(object):
             ):
             used_all_kpts = True
         else:
-            used_all_kpts = False 
+            used_all_kpts = False
 
         for ispin in range(self._nspin):
             pw = proj[ispin]
@@ -416,27 +474,23 @@ class procar(object):
 
         return self._xen, pdos
 
+    def get_pband(self, atoms=':', kpts=':', spd=':',
+                        cell=None,
+                        nkseg=None):
+        '''
+        Construct the band structure from PROCAR. In addition, the
+        site/k-points/spd-orbital projection of each KS orbital will be
+        returned.
+        '''
+
+        k, b = self.get_kpath(cell, nkseg)
+        e = self.get_band_energies()
+        w = self.get_pw(atoms, kpts, spd)
+
+        return k, b, e, w
+
+############################################################
 if __name__ == '__main__':
-    # import matplotlib as mpl
-    # import matplotlib.pyplot as plt
-    #
-    # xx = procar()
-    # # total dos
-    # x0, y0 = xx.get_pdos()
-    # # site projected DOS
-    # x1, y1 = xx.get_pdos(atoms=[192, 209])
-    # # site projected DOS + s/p/d projected DOS
-    # xx.set_nedos(1000)
-    # x2, y2 = xx.get_pdos(atoms='0::2', spd=['dz2', 'dx2'])
-    #
-    # fig, ax = plt.subplots()
-    # fig.set_size_inches((4.0, 3.0))
-    #
-    # ax.plot(x0, y0[0], color='r')
-    # ax.plot(x1, y1[0], color='g')
-    # ax.plot(x2, y2[0], color='b')
-    #
-    # plt.show()
 
     xx = procar()
-    b0 = xx.get_band_energies()
+    k, b, e, w = xx.get_pband(atoms=[1, 3, 4])
