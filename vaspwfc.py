@@ -417,7 +417,7 @@ class vaspwfc(object):
                     phi_k /= np.sqrt(2.)
                     phi_k[0,0,0] *= np.sqrt(2.)
                     phi_k = np.swapaxes(phi_k, 0, 2)
-                    tmp =  np.fft.irfftn(phi_k, s=ngrid) * normFac
+                    tmp =  np.fft.irfftn(phi_k, s=(ngrid[2], ngrid[1], ngrid[0])) * normFac
                     return np.swapaxes(tmp, 0, 2)
             else:
                 # perform complex2complex FFT
