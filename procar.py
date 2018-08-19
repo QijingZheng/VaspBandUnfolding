@@ -3,6 +3,7 @@
 import os
 import re
 import numpy as np
+from ase.io import read
 from collections import Iterable
 
 ############################################################
