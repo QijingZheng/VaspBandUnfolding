@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-   
 
+import os
 import numpy as np
 from math import sqrt
 from vasp_constant import *
+from multiprocessing import cpu_count
 from scipy.fftpack import fftfreq, fftn, ifftn
 
 ############################################################
@@ -78,7 +80,7 @@ class vaspwfc(object):
     '''
 
     def __init__(self, fnm='WAVECAR', lsorbit=False, lgamma=False,
-                 gamma_half='z'):
+                 gamma_half='z', omp_num_threads=1):
         '''
         Initialization.
         '''
@@ -87,6 +89,10 @@ class vaspwfc(object):
         self._lsoc  = lsorbit
         self._lgam  = lgamma
         self._gam_half = gamma_half.lower()
+        
+        # It seems that some modules in scipy uses OPENMP, it is therefore
+        # desirable to set the OMP_NUM_THREADS to tune the parallization.
+        os.environ['OMP_NUM_THREADS'] = str(omp_num_threads)
 
         assert not (lsorbit and lgamma), 'The two settings conflict!'
         assert self._gam_half == 'x' or self._gam_half == 'z', \
@@ -104,6 +110,14 @@ class vaspwfc(object):
         
         if self._lsoc:
             assert self._nspin == 1, "NSPIN = 1 for noncollinear version WAVECAR!"
+
+    def set_omp_num_threads(self, nproc):
+        '''
+        Set the OMP_NUM_THREADS envrionment variable
+        '''
+        assert 1 <= nproc <= cpu_count()
+
+        os.envrion['OMP_NUM_THREADS'] = str(nproc)
 
     def isSocWfc(self):
         """
