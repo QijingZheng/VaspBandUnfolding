@@ -82,33 +82,49 @@ def reorder_band(wavecar='WAVECAR', max_nbnds=None,
                 np.savetxt('M_{:d}_{:03d}.dat'.format(ispin+1, ikpt+1), M,
                            fmt='%4.2f')
 
-            # R = np.zeros_like(M, dtype=int)
-            # R[M >= olap_cut] = 1
-            # for ii in range(nbnds):
-            #     if not R[ii].sum() == 1:
-            #         R[ii] = 0
+            ############################################################
+            # Use a rotation matrix to re-asign the band index
+            ############################################################
+            R = np.zeros_like(M, dtype=int)         # the rotation matrix
+            R[M >= olap_cut] = 1                    #
+            flag = np.zeros(nbnds, dtype=int)       # alread assigned?
 
-            # assign the band index by maximum overlap > "olap_cut"
-            max_olap = np.max(M, axis=1)
-            max_olap_idx = np.argmax(M, axis=1)
-            olap_filter = max_olap >= olap_cut
-            # find out the maximum overlap
-            band_idx[ispin, ikpt, olap_filter] = band_idx[ispin, ikpt-1,
-                                                          max_olap_idx[olap_filter]]
-
-            # For those un-assigned bands, maximize the overlap
             for ii in range(nbnds):
-                if band_idx[ispin, ikpt, ii] == -1:
-                    # index from maximum to minimum
-                    olap_sort_order = np.argsort(M[ii])[::-1]
-                    for jj in olap_sort_order:
-                        if band_idx[ispin, ikpt-1, jj] in band_idx[ispin,
-                                                                   ikpt]:
-                            continue
-                        else:
-                            band_idx[ispin, ikpt, ii] = band_idx[ispin,
-                                                                 ikpt-1, jj]
+                if not R[ii].sum() == 1:
+                    R[ii] = 0
+                    for jj in np.argsort(M[ii])[::-1]:
+                        if flag[jj] == 0:
+                            R[ii,jj] = 1
                             break
+                flag += R[ii]
+            assert np.sum(flag, dtype=int) == nbnds
+            assert int(np.abs(np.linalg.det(R))) == 1
+            band_idx[ispin, ikpt] = np.dot(R, band_idx[ispin, ikpt-1])
+
+            ############################################################
+            # Method used by QE PP/bands.f90
+            ############################################################
+            # # assign the band index by maximum overlap > "olap_cut"
+            # max_olap = np.max(M, axis=1)
+            # max_olap_idx = np.argmax(M, axis=1)
+            # olap_filter = max_olap >= olap_cut
+            # # find out the maximum overlap
+            # band_idx[ispin, ikpt, olap_filter] = band_idx[ispin, ikpt-1,
+            #                                               max_olap_idx[olap_filter]]
+            #
+            # # For those un-assigned bands, maximize the overlap
+            # for ii in range(nbnds):
+            #     if band_idx[ispin, ikpt, ii] == -1:
+            #         # index from maximum to minimum
+            #         olap_sort_order = np.argsort(M[ii])[::-1]
+            #         for jj in olap_sort_order:
+            #             if band_idx[ispin, ikpt-1, jj] in band_idx[ispin,
+            #                                                        ikpt]:
+            #                 continue
+            #             else:
+            #                 band_idx[ispin, ikpt, ii] = band_idx[ispin,
+            #                                                      ikpt-1, jj]
+            #                 break
 
             # set current wavefunction to previous
             Unk_1[:, :, :, :] = Unk[:, :, :, :]
