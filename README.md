@@ -214,3 +214,26 @@ performed with `VASP` and the input files can be found in the
    Compared to the band structure of the primitive cell, there are some empty
    states at the top of figure. This is due to a too small value of `NBANDS` in
    supercell non-scf calculation, and thus those states are not included.
+
+## Band re-ordering
+
+Band re-ordering is possible by maximizing the overlap between nerghbouring
+k-points. The overlap is defined as the inner product of the periodic part of
+the Bloch wavefunctions.
+
+                        `< u(n, k) | u(m, k-1) >`
+
+Note, however, the `WAVECAR` only contains the pseudo-wavefunction, and thus the
+pseudo `u(n,k)` are used in this function. Moreover, since the number of
+planewaves for each k-points are different, the inner product is performed in
+real space.
+
+The overlap maximalization procedure is as follows:
+1. Pick out those bands with large overlap (> olap_cut).
+2. Assign those un-picked bands by maximizing the overlap.
+
+An example band structure re-ordering is performed in MoS2. The result is shown
+in the following image, where the left/right panel shows the
+un-ordered/re-ordered band structure.
+
+   ![band_reorder](./examples/band_reorder/kband_small.png) | 
