@@ -86,6 +86,11 @@ class vaspwfc(object):
         '''
 
         self._fname = fnm
+        # the directory containing the input file
+        self._dname  = os.path.dirname(fnm)
+        if self._dname == '':
+            self._dname = '.'
+
         self._lsoc  = lsorbit
         self._lgam  = lgamma
         self._gam_half = gamma_half.lower()
@@ -183,7 +188,7 @@ class vaspwfc(object):
         else:
             raise ValueError("Invalid TAG values: {}".format(self._rtag))
 
-    def readWFBand(self, ispin=1, ikpt=1, iband=1):
+    def readWFBand(self):
         '''
         Extract KS energies and Fermi occupations from WAVECAR.
         '''
@@ -212,6 +217,40 @@ class vaspwfc(object):
         else:
             self._kpath = None
         return  self._kpath, self._bands
+
+    def get_kpath(self, nkseg=None):
+        '''
+        Construct k-point path, find out the k-path boundary if possible.
+
+        nkseg is the number of k-points in each k-path segments.
+        '''
+
+        if nkseg is None:
+            if os.path.isfile(self._dname + "/KPOINTS"):
+                kfile = open(self._dname + "/KPOINTS").readlines()
+                if kfile[2][0].upper() == 'L':
+                    nkseg = int(kfile[1].split()[0])
+                else:
+                    raise ValueError('Error reading number of k-points from KPOINTS')
+        assert nkseg > 0
+
+        nsec  = self._nkpts // nkseg
+
+        v = self._kvecs.copy()
+        for ii in range(nsec):
+            ki = ii * nkseg
+            kj = (ii + 1) * nkseg
+            v[ki:kj,:] -= v[ki]
+
+        self._kpath = np.linalg.norm(np.dot(v, self._Bcell), axis=1)
+        for ii in range(1, nsec):
+            ki = ii * nkseg
+            kj = (ii + 1) * nkseg
+            self._kpath[ki:kj] += self._kpath[ki - 1]
+
+            self._kbound =  np.concatenate((self._kpath[0::nkseg], [self._kpath[-1],]))
+
+        return self._kpath, self._kbound
 
     def gvectors(self, ikpt=1, force_Gamma=False, check_consistency=True):
         '''
