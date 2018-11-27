@@ -158,6 +158,7 @@ class procar(object):
 
         if self._lsoc:
             self._aproj.resize(self._nspin, self._nkpts, self._nbands, 4, self._nions, self._nlmax)
+            self._Mxyz = self._aproj[:,:,:,1:,:,:]
             self._aproj = self._aproj[:,:,:,0,:,:]
         else:
             self._aproj.resize(self._nspin, self._nkpts, self._nbands, self._nions, self._nlmax)
@@ -168,6 +169,16 @@ class procar(object):
 
         # close the PROCAR
         self._procar.close()
+
+    def get_magnetization(self):
+        '''
+        In an noncollinear calculation, get the magnetization in x/y/z
+        direction.
+        '''
+
+        assert self._lsoc
+
+        return self._Mxyz.copy()
 
     def get_nkpts(self):
         '''
