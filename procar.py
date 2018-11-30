@@ -148,6 +148,8 @@ class procar(object):
         self._kptw = np.asarray([line.split()[-1] for line in inp if 'weight' in line], dtype=float)
         # k-points vectors of each k-points
         self._kptv = np.asarray([line.split()[-6:-3] for line in inp if 'weight' in line], dtype=float)
+        # in case of spin poliarized calculation
+        self._kptv = self._kptv[:self._nkpts]
         # band energies
         self._eband = np.asarray([line.split()[-4] for line in inp
                                   if 'occ.' in line], dtype=float)
