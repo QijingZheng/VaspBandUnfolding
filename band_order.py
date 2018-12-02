@@ -57,19 +57,32 @@ def reorder_band(wavecar='WAVECAR', max_nbnds=None,
         # Loop over k-points
         for ikpt in range(nkpts):
 
+            G = wfc.gvectors(ikpt=ikpt+1)
+
             if ikpt == 0:
                 # Unk(r) at previous k-points
                 for iband in range(nbnds):
-                    Unk_1[iband, ...] = wfc.wfc_r(ikpt=ikpt+1, ispin=ispin+1,
-                                                  iband=iband+1, ngrid=(nx, ny, nz))
+                    # No need to perform inner product in real space
+                    # Unk_1[iband, ...] = wfc.wfc_r(ikpt=ikpt+1, ispin=ispin+1,
+                    #                               iband=iband+1, ngrid=(nx, ny, nz))
+                    #
+                    Unk_1[iband, G[:, 0], G[:, 1], G[:, 2]] = \
+                        wfc.readBandCoeff(
+                            ispin=ispin+1, ikpt=ikpt+1, iband=iband+1, norm=True
+                        )
                 continue
 
             print("Parsing k-points #{}...".format(ikpt))
 
             # Unk(r) at current k-points
             for iband in range(nbnds):
-                Unk[iband, ...] = wfc.wfc_r(ikpt=ikpt+1, ispin=ispin+1,
-                                            iband=iband+1, ngrid=(nx, ny, nz))
+                # No need to perform inner product in real space
+                # Unk[iband, ...] = wfc.wfc_r(ikpt=ikpt+1, ispin=ispin+1,
+                #                             iband=iband+1, ngrid=(nx, ny, nz))
+                Unk[iband, G[:, 0], G[:, 1], G[:, 2]] = \
+                    wfc.readBandCoeff(
+                        ispin=ispin+1, ikpt=ikpt+1, iband=iband+1, norm=True
+                    )
 
             # Calculating the overlap matrix
             for ii in range(nbnds):
@@ -94,7 +107,7 @@ def reorder_band(wavecar='WAVECAR', max_nbnds=None,
                     R[ii] = 0
                     for jj in np.argsort(M[ii])[::-1]:
                         if flag[jj] == 0:
-                            R[ii,jj] = 1
+                            R[ii, jj] = 1
                             break
                 flag += R[ii]
             assert np.sum(flag, dtype=int) == nbnds
@@ -197,7 +210,9 @@ if __name__ == "__main__":
 
     for ii in range(2):
         ax = axes[ii]
-        ax.axvline(x=kpath[59], lw=0.5, ls=':')
+        for kb in kbound:
+            ax.axvline(x=kb, lw=0.5, ls=':')
+        # ax.axvline(x=kpath[59], lw=0.5, ls=':')
         if ii == 0:
             ax.set_ylabel('Energy [eV]')
 
