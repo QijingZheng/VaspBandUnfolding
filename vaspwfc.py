@@ -10,7 +10,7 @@ from scipy.fftpack import fftfreq, fftn, ifftn
 
 ############################################################
 def save2vesta(phi=None, poscar='POSCAR', prefix='wfc', 
-               lgam=False, lreal=False):
+               lgam=False, lreal=False, ncol=10):
     '''
     Save the real space pseudo-wavefunction as vesta format.
     '''
@@ -27,27 +27,31 @@ def save2vesta(phi=None, poscar='POSCAR', prefix='wfc',
     except:
         raise IOError('Failed to open %s' % poscar)
 
+    # Faster IO
+    nrow = phi.size // ncol
+    nrem = phi.size % ncol
+    fmt = "%16.8E"
+
+    psi = phi.copy()
+    psi = psi.flatten(order='F')
+    psi_h = psi[:nrow * ncol].reshape((nrow, ncol))
+    psi_r = psi[nrow * ncol:]
+
     with open(prefix + '_r.vasp', 'w') as out:
         out.write(head)
-        nwrite=0
-        for kk in range(nz):
-            for jj in range(ny):
-                for ii in range(nx):
-                    nwrite += 1
-                    out.write('%16.8E ' % phi.real[ii,jj,kk])
-                    if nwrite % 10 == 0:
-                        out.write('\n')
+        out.write(
+            '\n'.join([''.join([fmt % xx for xx in row])
+                       for row in psi_h.real])
+        )
+        out.write("\n" + ''.join([fmt % xx for xx in psi_r.real]))
     if not (lgam or lreal):
         with open(prefix + '_i.vasp', 'w') as out:
             out.write(head)
-            nwrite=0
-            for kk in range(nz):
-                for jj in range(ny):
-                    for ii in range(nx):
-                        nwrite += 1
-                        out.write('%16.8E ' % phi.imag[ii,jj,kk])
-                        if nwrite % 10 == 0:
-                            out.write('\n')
+            out.write(
+                '\n'.join([''.join([fmt % xx for xx in row])
+                           for row in psi_h.imag])
+            )
+            out.write("\n" + ''.join([fmt % xx for xx in psi_r.imag]))
 
 ############################################################
 
@@ -321,7 +325,8 @@ class vaspwfc(object):
 
         return np.asarray(Gvec, dtype=int)
 
-    def save2vesta(self, phi=None, lreal=False, poscar='POSCAR', prefix='wfc'):
+    def save2vesta(self, phi=None, lreal=False, poscar='POSCAR', prefix='wfc',
+                   ncol=10):
         '''
         Save the real space pseudo-wavefunction as vesta format.
         '''
@@ -338,27 +343,31 @@ class vaspwfc(object):
         except:
             raise IOError('Failed to open %s' % poscar)
 
+        # Faster IO
+        nrow = phi.size // ncol
+        nrem = phi.size % ncol
+        fmt = "%16.8E"
+
+        psi = phi.copy()
+        psi = psi.flatten(order='F')
+        psi_h = psi[:nrow * ncol].reshape((nrow, ncol))
+        psi_r = psi[nrow * ncol:]
+
         with open(prefix + '_r.vasp', 'w') as out:
             out.write(head)
-            nwrite=0
-            for kk in range(nz):
-                for jj in range(ny):
-                    for ii in range(nx):
-                        nwrite += 1
-                        out.write('%16.8E ' % phi.real[ii,jj,kk])
-                        if nwrite % 10 == 0:
-                            out.write('\n')
+            out.write(
+                '\n'.join([''.join([fmt % xx for xx in row])
+                           for row in psi_h.real])
+            )
+            out.write("\n" + ''.join([fmt % xx for xx in psi_r.real]))
         if not (self._lgam or lreal):
             with open(prefix + '_i.vasp', 'w') as out:
                 out.write(head)
-                nwrite=0
-                for kk in range(nz):
-                    for jj in range(ny):
-                        for ii in range(nx):
-                            nwrite += 1
-                            out.write('%16.8E ' % phi.imag[ii,jj,kk])
-                            if nwrite % 10 == 0:
-                                out.write('\n')
+                out.write(
+                    '\n'.join([''.join([fmt % xx for xx in row])
+                               for row in psi_h.imag])
+                )
+                out.write("\n" + ''.join([fmt % xx for xx in psi_r.imag]))
 
     def wfc_r(self, ispin=1, ikpt=1, iband=1,
                     gvec=None, Cg=None, ngrid=None,
