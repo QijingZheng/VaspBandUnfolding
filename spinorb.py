@@ -208,7 +208,7 @@ def setup_ls(L, theta=0.0, phi=0.0, saxis=None):
         saxis /= np.linalg.norm(saxis)
         assert saxis.shape == (3,)
         theta = np.arccos(saxis[2])           # theta in range [0, pi]
-        phi = np.arctan2(saxis[0], saxis[1])  # phi in range [-pi, pi]
+        phi = np.arctan2(saxis[1], saxis[0])  # phi in range [-pi, pi]
 
     TLP1 = 2 * L + 1
 
