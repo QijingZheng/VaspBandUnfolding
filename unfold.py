@@ -337,7 +337,7 @@ class unfold():
         where {G} is a subset of the reciprocal space vectors of the supercell.
         '''
 
-        print 'Processing k-point %8.4f %8.4f %8.4f' % (k0[0], k0[1], k0[2])
+        print('Processing k-point %8.4f %8.4f %8.4f' % (k0[0], k0[1], k0[2]))
 
         # find the K0 onto which k0 folds
         # k0 = G0 + K0
@@ -449,9 +449,9 @@ class unfold():
         sw = []
         for ispin in range(self.wfc._nspin):
             if self.wfc._nspin == 2:
-                print "#" * 60
-                print "Spin component: %d" % ispin
-                print "#" * 60
+                print("#" * 60)
+                print("Spin component: %d" % ispin)
+                print("#" * 60)
             sw.append([self.spectral_weight_k(kpoints[ik], whichspin=ispin+1)
                        for ik in range(NKPTS)])
 

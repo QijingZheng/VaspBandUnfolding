@@ -34,7 +34,7 @@ def nac_from_vaspwfc(waveA, waveB, gamma=True,
     phi_i = vaspwfc(waveA)      # wavecar at t
     phi_j = vaspwfc(waveB)      # wavecar at t + dt
 
-    print 'Calculating NACs between <%s> and <%s>' % (waveA, waveB)
+    print('Calculating NACs between <%s> and <%s>' % (waveA, waveB))
 
     assert phi_i._nbands == phi_j._nbands, '#bands not match!'
     assert phi_i._nplws[ikpt-1] == phi_j._nplws[ikpt-1], '#nplws not match!'
@@ -73,7 +73,7 @@ def nac_from_vaspwfc(waveA, waveB, gamma=True,
                 nacs[jj,ii] = -np.conj(nacs[ii,jj])
 
     t2 = time()
-    print '1. Elapsed Time: %.4f [s]' % (t2 - t1)
+    print('1. Elapsed Time: %.4f [s]' % (t2 - t1))
 
     # EnT = (phi_i._bands[ispin-1,ikpt-1,:] + phi_j._bands[ispin-1,ikpt-1,:]) / 2.
     EnT = phi_i._bands[ispin-1,ikpt-1,bmin-1:bmax]

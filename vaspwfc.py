@@ -625,7 +625,7 @@ class vaspwfc(object):
                                        norm=norm)
                     phi_j_abs = np.abs(phi_j)
 
-                    print 'Calculating IPR of #spin %4d, #kpt %4d, #band %4d' % (ispin+1, ikpt+1, iband+1)
+                    print('Calculating IPR of #spin %4d, #kpt %4d, #band %4d' % (ispin+1, ikpt+1, iband+1))
                     self.ipr[ispin, ikpt, iband, 0] = self._kpath[ikpt] if self._kpath is None else 0
                     self.ipr[ispin, ikpt, iband, 1] = self._bands[ispin, ikpt, iband]
                     self.ipr[ispin, ikpt, iband, 2] = np.sum(phi_j_abs**4) / np.sum(phi_j_abs**2)**2
@@ -668,7 +668,7 @@ class vaspwfc(object):
         '''
 
         if warn:
-            print """
+            warning = """
             ###################################################################
             If you are using VESTA to view the resulting ELF, please rename the
             output file as ELFCAR, otherwise there will be some error in the
@@ -684,6 +684,7 @@ class vaspwfc(object):
             method.
             ###################################################################
             """
+            print(warning)
 
         # the k-point weights
         kptw = np.array(kptw, dtype=float)
