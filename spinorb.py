@@ -719,7 +719,7 @@ if __name__ == '__main__':
     MAEs = [get_mae(theta) for theta in z_angles]
     MAEs -= MAEs[0]
     for theta, mae in zip(z_angles, MAEs):
-        print "{:5.2f} {:22.16f}".format(theta / np.pi * 180, mae)
+        print("{:5.2f} {:22.16f}".format(theta / np.pi * 180, mae))
 
     mae_vasp = np.loadtxt('../mae.dat')[:, 1]
 
