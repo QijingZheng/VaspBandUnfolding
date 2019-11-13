@@ -350,6 +350,13 @@ class procar(object):
              or isinstance(spd, Iterable)
              or isinstance(kpts, str))
 
+        if isinstance(atoms, int):
+            atoms = [atoms]
+        if isinstance(kpts, int):
+            kpts = [kpts]
+        if isinstance(spd, int):
+            spd = [spd]
+
         if isinstance(atoms, str):
             atoms = string2index(atoms)
         if isinstance(kpts, str):
@@ -460,7 +467,9 @@ class procar(object):
 
         atoms, kpts, spd = self.translate_selection(atoms, kpts, spd)
 
-        if np.alltrue(
+        if len(kpts) == self._nkpts:
+            used_all_kpts = True
+        elif np.alltrue(
                 np.sort(np.arange(self._nkpts)[kpts]) == np.arange(self._nkpts)
             ):
             used_all_kpts = True
@@ -475,7 +484,7 @@ class procar(object):
             else:
                 # if not all the k-points are used, then probably we should get
                 # rid of the k-point weights
-                td = self._tdos[ispin, kpts,...] / self._kptw[kpts, np.newaxis, np.newaxis]
+                td = self._tdos[ispin, kpts,...] / self._kptw[ispin, kpts, np.newaxis, np.newaxis]
 
             pdos.append(np.sum(pw[...,np.newaxis] * td, axis=(0, 1)))
 
