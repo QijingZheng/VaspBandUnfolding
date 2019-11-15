@@ -467,12 +467,13 @@ class procar(object):
 
         atoms, kpts, spd = self.translate_selection(atoms, kpts, spd)
 
-        if len(kpts) == self._nkpts:
-            used_all_kpts = True
-        elif np.alltrue(
-                np.sort(np.arange(self._nkpts)[kpts]) == np.arange(self._nkpts)
-            ):
-            used_all_kpts = True
+        if len(np.arange(self._nkpts)[kpts]) == self._nkpts:
+            if np.alltrue(
+                    np.sort(np.arange(self._nkpts)[kpts]) == np.arange(self._nkpts)
+                ):
+                used_all_kpts = True
+            else:
+                used_all_kpts = False
         else:
             used_all_kpts = False
 
