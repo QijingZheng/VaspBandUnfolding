@@ -626,7 +626,7 @@ class vaspwfc(object):
                     phi_j_abs = np.abs(phi_j)
 
                     print('Calculating IPR of #spin %4d, #kpt %4d, #band %4d' % (ispin+1, ikpt+1, iband+1))
-                    self.ipr[ispin, ikpt, iband, 0] = self._kpath[ikpt] if self._kpath is None else 0
+                    self.ipr[ispin, ikpt, iband, 0] = self._kpath[ikpt] if self._kpath is not None else 0
                     self.ipr[ispin, ikpt, iband, 1] = self._bands[ispin, ikpt, iband]
                     self.ipr[ispin, ikpt, iband, 2] = np.sum(phi_j_abs**4) / np.sum(phi_j_abs**2)**2
 
