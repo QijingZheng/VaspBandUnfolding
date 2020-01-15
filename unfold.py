@@ -94,6 +94,7 @@ def make_kpath(kbound, nseg=40):
 def EBS_scatter(kpts, cell, spectral_weight,
                 eref=0.0,
                 nseg=None, save='ebs_s.png',
+                kpath_label=[],
                 factor=20, figsize=(3.0, 4.0),
                 ylim=(-3, 3), show=True,
                 color='b'):
@@ -149,7 +150,17 @@ def EBS_scatter(kpts, cell, spectral_weight,
 
         if nseg:
             for kb in kdist[::nseg]:
-                ax.axvline(x=kb, lw=0.5, color='k')
+                ax.axvline(x=kb, lw=0.5, color='k', ls=':', alpha=0.8)
+
+            if kpath_label:
+                ax.set_xticks(np.r_[kdist[::nseg], kdist[-1]])
+                kname = [x.upper() for x in kpath_label]
+                for ii in range(len(kname)):
+                    if kname[ii] == 'G':
+                        kname[ii] = r'$\mathrm{\mathsf{\Gamma}}$'
+                    else:
+                        kname[ii] = r'$\mathrm{\mathsf{%s}}$' % kname[ii]
+                ax.set_xticklabels(kname)
 
     plt.tight_layout(pad=0.2)
     plt.savefig(save, dpi=360)
@@ -157,6 +168,7 @@ def EBS_scatter(kpts, cell, spectral_weight,
 
 def EBS_cmaps(kpts, cell, E0, spectral_function,
               eref=0.0, nseg=None,
+              kpath_label=[],
               save='ebs_c.png',
               figsize=(3.0, 4.0),
               ylim=(-3, 3), show=True,
@@ -209,7 +221,17 @@ def EBS_cmaps(kpts, cell, E0, spectral_function,
 
         if nseg:
             for kb in kdist[::nseg]:
-                ax.axvline(x=kb, lw=0.5, color='k')
+                ax.axvline(x=kb, lw=0.5, color='k', ls=':', alpha=0.8)
+
+            if kpath_label:
+                ax.set_xticks(np.r_[kdist[::nseg], kdist[-1]])
+                kname = [x.upper() for x in kpath_label]
+                for ii in range(len(kname)):
+                    if kname[ii] == 'G':
+                        kname[ii] = r'$\mathrm{\mathsf{\Gamma}}$'
+                    else:
+                        kname[ii] = r'$\mathrm{\mathsf{%s}}$' % kname[ii]
+                ax.set_xticklabels(kname)
 
     plt.tight_layout(pad=0.2)
     plt.savefig(save, dpi=360)
