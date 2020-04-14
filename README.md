@@ -134,6 +134,45 @@ performed with `VASP` and the input files can be found in the
          [0.0, 3.0, 0.0],
          [0.0, 0.0, 1.0]]
    ```
+   or you can provide the supercell POSCAR and primitive cell POSCAR to derive M
+   ```python
+   #!/usr/bin/env python
+
+from unfold import make_kpath, removeDuplicateKpoints, find_K_from_k, save2VaspKPOINTS
+from logging import log, DEBUG
+import numpy as np
+from optparse import OptionParser
+
+def getCellFromPOSCAR(fname):
+    lines = open(fname, 'r').readlines()[2:5]
+    cell = np.asarray([float(num) for num in "".join(lines).split()]).reshape((3, 3))
+    return cell
+
+def parseCommandLineArgs():
+    usage = "usage: %prog [options] POSCAR_supercell POSCAR_primitive_cell"
+    par = OptionParser(usage=usage)
+
+    par.add_option("-s", "--supercell",
+            action='store', type='string', dest='supercell',
+            default='POSCAR',
+            help='location of POSCAR of supercell')
+
+    par.add_option('-p', '--primitive',
+            action='store', type='string', dest='primitivecell',
+            default='',
+            help='location of POSCAR of primitive cell')
+
+    return par.parse_args()
+
+par, args = parseCommandLineArgs()
+
+log(DEBUG, par)
+
+supercell = getCellFromPOSCAR(par.supercell)
+primitive = getCellFromPOSCAR(par.primitivecell)
+
+M = np.dot(supercell, np.linalg.inv(primitive))
+   ```
 2. In the second step, generate band path in the primitive Brillouin Zone (PBZ)
    and find the correspondig K points of the supercell BZ (SBZ) onto which they
    fold.
