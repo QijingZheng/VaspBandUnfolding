@@ -63,7 +63,7 @@ def sph_r(xyz, l):
     ylm_c = sph_c(xyz, l)
     u = U_c2r(l)
 
-    return np.dot(ylm_c, u.T)
+    return np.dot(ylm_c, u.T).real
 
 
 def U_c2r(l):
@@ -100,41 +100,51 @@ def U_r2c(l):
     return U_c2r(l).conj().T
 
 
-if __name__ == "__main__":
-    phi = np.linspace(0, np.pi, 100)
-    theta = np.linspace(0, 2*np.pi, 100)
-    phi, theta = np.meshgrid(phi, theta)
+def show_sph_harm(m, l, real=True, N=50):
+    '''
+    Show the spherical harmonics on a unit sphere
+    '''
+    theta = np.linspace(0, np.pi, N)
+    phi = np.linspace(0, 2*np.pi, N)
+    theta, phi = np.meshgrid(theta, phi)
 
     # The Cartesian coordinates of the unit sphere
-    x = np.sin(phi) * np.cos(theta)
-    y = np.sin(phi) * np.sin(theta)
-    z = np.cos(phi)
-
-    # x = x.ravel()
-    # y = y.ravel()
-    # z = z.ravel()
+    x = np.sin(theta) * np.cos(phi)
+    y = np.sin(theta) * np.sin(phi)
+    z = np.cos(theta)
     xyz = np.c_[x.ravel(), y.ravel(), z.ravel()]
 
-    xx = sph_c(xyz, 3)
-    yy = sph_r(xyz, 3)
-    print(yy.real.max(), yy.imag.max())
+    # from time import time
+    # t0 = time()
+    if real:
+        ylm = sph_r(xyz, l)[:, m+l].reshape(N, N)
+    else:
+        ylm = sph_c(xyz, l)[:, m+l].reshape(N, N).real
+    # t1 = time()
+    # print(t1 - t0)
 
-    # import matplotlib.pyplot as plt
-    # from matplotlib import cm, colors
-    # from mpl_toolkits.mplot3d import Axes3D
-    # import numpy as np
-    # from scipy.special import sph_harm
-    #
-    # # Calculate the spherical harmonic Y(l,m) and normalize to [0,1]
-    # fcolors = xx[:, 2].real.reshape((100, 100))
-    # fmax, fmin = fcolors.max(), fcolors.min()
-    # fcolors = (fcolors - fmin)/(fmax - fmin)
-    #
-    # # Set the aspect ratio to 1 so our sphere looks spherical
-    # fig = plt.figure(figsize=plt.figaspect(1.))
-    # ax = fig.add_subplot(111, projection='3d')
-    # ax.plot_surface(x, y, z,  rstride=1, cstride=1,
-    #                 facecolors=cm.seismic(fcolors))
-    # # Turn off the axis planes
-    # ax.set_axis_off()
-    # plt.show()
+    import matplotlib.pyplot as plt
+    from matplotlib import cm, colors
+    from mpl_toolkits.mplot3d import Axes3D
+
+    # Calculate the spherical harmonic Y(l,m) and normalize to [0,1]
+    fcolors = ylm
+    fmax, fmin = fcolors.max(), fcolors.min()
+    fcolors = (fcolors - fmin)/(fmax - fmin)
+
+    # Set the aspect ratio to 1 so our sphere looks spherical
+    fig = plt.figure(
+        figsize=plt.figaspect(1.)
+    )
+    ax = fig.add_subplot(111, projection='3d')
+
+    ax.plot_surface(x, y, z,  rstride=1, cstride=1,
+                    facecolors=cm.seismic(fcolors))
+
+    # Turn off the axis planes
+    ax.set_axis_off()
+    plt.show()
+
+
+if __name__ == "__main__":
+    show_sph_harm(m=-1, l=3, real=True)
