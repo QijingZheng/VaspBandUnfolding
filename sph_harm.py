@@ -34,7 +34,7 @@ def cart2sph(xyz):
     return np.array([r, phi, theta])
 
 
-def sph_c(xyz, l):
+def sph_c(xyz, l, m=None):
     '''
     Complex spherial harmonics including the Condon-Shortley phase.
 
@@ -46,27 +46,35 @@ def sph_c(xyz, l):
     xyz = np.asarray(xyz, dtype=float)
     if xyz.ndim == 1:
         xyz = xyz[None, :]
+    if m:
+        assert -l <= m <= l, "'m' must be in the range of [{},{}]".format(-l, l)
 
     r, phi, theta = cart2sph(xyz)
     N = xyz.shape[0]
     ylm = [sph_harm(m, l, phi, theta) for m in range(-l, l+1)]
 
-    return np.array(ylm, dtype=complex).T
+    if m is None:
+        return np.array(ylm, dtype=complex).T
+    else:
+        return np.array(ylm, dtype=complex).T[:, m+l]
 
 
-def sph_r(xyz, l):
+def sph_r(xyz, l, m=None):
     '''
     Real spherial harmonics.
 
     https://en.wikipedia.org/wiki/Table_of_spherical_harmonics#Real_spherical_harmonics
     '''
     ylm_c = sph_c(xyz, l)
-    u = U_c2r(l)
+    u = sph_u_c2r(l)
 
-    return np.dot(ylm_c, u.T).real
+    if m is None:
+        np.dot(ylm_c, u.T).real
+    else:
+        return np.dot(ylm_c, u.T).real[:, m+l]
 
 
-def U_c2r(l):
+def sph_u_c2r(l):
     '''
     Set up transformation matrix complex->real spherical harmonics.
 
@@ -93,11 +101,11 @@ def U_c2r(l):
     return U_C2R
 
 
-def U_r2c(l):
+def sph_u_r2c(l):
     '''
     Transformation matrix real->complex spherical harmonics
     '''
-    return U_c2r(l).conj().T
+    return sph_u_c2r(l).conj().T
 
 
 def show_sph_harm(m, l, real=True, N=50):
@@ -117,9 +125,9 @@ def show_sph_harm(m, l, real=True, N=50):
     # from time import time
     # t0 = time()
     if real:
-        ylm = sph_r(xyz, l)[:, m+l].reshape(N, N)
+        ylm = sph_r(xyz, l, m).reshape(N, N)
     else:
-        ylm = sph_c(xyz, l)[:, m+l].reshape(N, N).real
+        ylm = sph_c(xyz, l, m).reshape(N, N).real
     # t1 = time()
     # print(t1 - t0)
 
@@ -147,4 +155,4 @@ def show_sph_harm(m, l, real=True, N=50):
 
 
 if __name__ == "__main__":
-    show_sph_harm(m=-1, l=3, real=True)
+    show_sph_harm(m=-2, l=3, real=False)
