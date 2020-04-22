@@ -6,7 +6,7 @@ import numpy as np
 
 class pawpot(object):
     '''
-    Read projectors from VASP PBE POTCAR.
+    Read projector functions and ae/ps partialwaves from VASP PBE POTCAR.
     '''
 
     NPSQNL = 100      # no. of data for projectors in reciprocal space
@@ -24,7 +24,6 @@ class pawpot(object):
         self.read_proj(non_radial_part)
         # read the ae/ps partial waves in the core region
         self.read_partial_wfc(radial_part)
-
 
     def read_proj(self, datastr):
         '''
@@ -55,11 +54,11 @@ class pawpot(object):
             for rr in dump[1:]:
                 reci, real = rr.split('Real Space Part')
                 qprojs.append(
-                        np.fromstring(reci, np.float, sep=' ')
-                        )
+                    np.fromstring(reci, np.float, sep=' ')
+                )
                 rprojs.append(
-                        np.fromstring(real, np.float, sep=' ')
-                        )
+                    np.fromstring(real, np.float, sep=' ')
+                )
 
         # the real space radial grid for the projector functions
         self.proj_rgrid = np.arange(self.NPSRNL) * self.proj_rmax / self.NPSRNL
@@ -71,7 +70,6 @@ class pawpot(object):
         self.qprojs = np.asarray(qprojs, dtype=float)
         # projector functions in real space
         self.rprojs = np.asarray(rprojs, dtype=float)
-
 
     def read_partial_wfc(self, datastr):
         '''
@@ -98,9 +96,9 @@ class pawpot(object):
         grid_start_idx = data.index(" grid") + 1
 
         core_data = np.array([
-                x for line in data[grid_start_idx:]
-                for x in line.strip().split()
-                if not re.match(r'\ \w+', line)
+            x for line in data[grid_start_idx:]
+            for x in line.strip().split()
+            if not re.match(r'\ \w+', line)
         ], dtype=float)
         core_data = core_data.reshape((-1, nmax))
         # number of projectors
@@ -114,7 +112,6 @@ class pawpot(object):
         self.core_ps_wfc = core_data[-nproj*2::2, :]
         # core region all-electron wavefunctions
         self.core_ae_wfc = core_data[-nproj*2+1::2, :]
-
 
     @property
     def symbol(self):
@@ -139,38 +136,63 @@ class pawpot(object):
 
         return np.sum(2 * self.proj_l + 1)
 
+    def plot(self):
+        '''
+        '''
+        import matplotlib as mpl
+        import matplotlib.pyplot as plt
+
+        mpl.rcParams['axes.unicode_minus'] = False
+        plt.style.use('ggplot')
+
+        figure = plt.figure(
+            figsize=(8.0, 4.0),
+            # figsize = plt.figaspect(0.6),
+            # dpi=300,
+        )
+
+        axes = [
+            plt.subplot(121),   # for projector functions
+            plt.subplot(122)    # for ps/ae partial waves
+        ]
+
+        for ii in range(self.lmax):
+            axes[0].plot(
+                self.proj_rgrid, self.rprojs[ii], label=f"L = {self.proj_l[ii]}",
+            )
+            l1, = axes[1].plot(
+                self.core_rgrid, self.core_ae_wfc[ii], label=f"L = {self.proj_l[ii]}"
+            )
+            axes[1].plot(
+                self.core_rgrid, self.core_ps_wfc[ii], ls=':',
+                color=l1.get_color()
+            )
+
+        for ax in axes:
+            ax.set_xlabel(r'$r\ [\AA]$', labelpad=5)
+
+            ax.axhline(y=0, ls=':', color='k', alpha=0.6)
+            ax.axvline(x=self.proj_rmax, ls=':', color='k', alpha=0.6)
+
+            ax.legend(loc='best')
+
+        axes[0].set_title("Projectors")
+        axes[1].set_title("AE/PS Partial Waves")
+
+        plt.tight_layout()
+        plt.show()
 
 
 if __name__ == '__main__':
     import time
     xx = open('potcar_ti').read()
+
     t0 = time.time()
     ps = pawpot(xx)
     t1 = time.time()
+
     # print(t1 - t0)
     # print(ps.symbol)
+    # print(ps.lmmax, ps.lmax)
 
-    print(ps.lmmax, ps.lmax)
-
-    # import numpy as np
-    # import matplotlib.pyplot as plt
-    #
-    # figure = plt.figure()
-    # ax = plt.subplot()
-    #
-    # nproj = ps.rprojs.shape[0]
-    # # for ii in range(nproj):
-    # #     # ax.plot(ps.proj_rgrid, ps.rprojs[ii], label=f"L = {ps.proj_l[ii]}")
-    # #     l, = ax.plot(ps.core_rgrid, ps.core_ae_wfc[ii], label=f"L = {ps.proj_l[ii]}")
-    # #     ax.plot(ps.core_rgrid, ps.core_ps_wfc[ii], ls = ':',
-    # #             color=l.get_color())
-    #
-    # ax.plot(ps.core_rgrid, ps.core_aepot)
-    #
-    # ax.axhline(y=0, ls=':', color='k', alpha=0.6)
-    # ax.axvline(x=ps.proj_rmax, ls=':', color='k', alpha=0.6)
-    #
-    # plt.legend(loc='best')
-    #
-    # plt.tight_layout()
-    # plt.show()
+    ps.plot()
