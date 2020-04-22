@@ -113,6 +113,33 @@ class pawpot(object):
         # core region all-electron wavefunctions
         self.core_ae_wfc = core_data[-nproj*2+1::2, :]
 
+    def csplines(self):
+        '''
+        Cubic spline interpolation of both the real and reciprocal space
+        projector functions.
+        '''
+
+        from scipy.interpolate import CubicSpline as cs
+
+        # for reciprocal space projector functions, natural boundary condition
+        # (Y'' = 0) is applied at both ends.
+        self.spl_qproj = [
+            cs(self.proj_qgrid, qproj, bc_type='natural') for qproj in
+            self.qprojs
+        ]
+        # for real space projector functions, natural boundary condition
+        # (Y'' = 0) is applied at the point N.
+        self.spl_rproj = []
+        for l, rproj in zip(self.proj_l, self.rprojs):
+            # Copy from VASP pseudo.F, I don't know why y1p depend on "l".
+            if l == 1:
+                yp1 = (rproj[1] - rproj[0]) / (self.proj_rmax / self.NPSRNL)
+            else:
+                y1p = 0.0
+            self.spl_rproj.append(
+                cs(self.proj_rgrid, rproj, bc_type=((1, y1p), (2, 0)))
+            )
+
     @property
     def symbol(self):
         '''
@@ -191,8 +218,12 @@ if __name__ == '__main__':
     ps = pawpot(xx)
     t1 = time.time()
 
-    # print(t1 - t0)
+    ps.csplines()
+
+    t2 = time.time()
+    print(t1 - t0)
+    print(t2 - t1)
     # print(ps.symbol)
     # print(ps.lmmax, ps.lmax)
 
-    ps.plot()
+    # ps.plot()
