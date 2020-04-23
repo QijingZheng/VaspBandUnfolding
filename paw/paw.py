@@ -209,6 +209,18 @@ class pawpot(object):
         plt.tight_layout()
         plt.show()
 
+    def __str__(self):
+        '''
+        '''
+        pstr = f"{self.symbol:>3s}\n"
+        pstr += f"\n{'l':>3s}{'rmax':>12s}\n"
+        pstr += ''.join(
+            [f"{self.proj_l[ii]:>3d}{self.proj_rmax:>12.6f}\n"
+                for ii in range(self.lmax)]
+        )
+
+        return pstr
+
 
 if __name__ == '__main__':
     import time
@@ -216,14 +228,16 @@ if __name__ == '__main__':
 
     t0 = time.time()
     ps = pawpot(xx)
-    t1 = time.time()
 
-    ps.csplines()
+    # t1 = time.time()
+    # ps.csplines()
+    # t2 = time.time()
+    # print(t1 - t0)
+    # print(t2 - t1)
 
-    t2 = time.time()
-    print(t1 - t0)
-    print(t2 - t1)
     # print(ps.symbol)
     # print(ps.lmmax, ps.lmax)
+    print(ps)
+    print(ps.core_ae_wfc[1][-1])
 
-    # ps.plot()
+    ps.plot()
