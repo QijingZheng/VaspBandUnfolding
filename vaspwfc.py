@@ -266,11 +266,11 @@ class vaspwfc(object):
         kvec = self._kvecs[ikpt-1]
         # fx, fy, fz = [fftfreq(n) * n for n in self._ngrid]
         # fftfreq in scipy.fftpack is a little different with VASP frequencies
-        fx = [ii if ii < self._ngrid[0] / 2 + 1 else ii - self._ngrid[0]
+        fx = [ii if ii < self._ngrid[0] // 2 + 1 else ii - self._ngrid[0]
                 for ii in range(self._ngrid[0])]
-        fy = [jj if jj < self._ngrid[1] / 2 + 1 else jj - self._ngrid[1]
+        fy = [jj if jj < self._ngrid[1] // 2 + 1 else jj - self._ngrid[1]
                 for jj in range(self._ngrid[1])]
-        fz = [kk if kk < self._ngrid[2] / 2 + 1 else kk - self._ngrid[2]
+        fz = [kk if kk < self._ngrid[2] // 2 + 1 else kk - self._ngrid[2]
                 for kk in range(self._ngrid[2])]
 
         # force_Gamma: consider gamma-only case regardless of the real setting
@@ -316,7 +316,7 @@ class vaspwfc(object):
         # WAVECAR are equal
         if check_consistency:
             if self._lsoc:
-                    assert Gvec.shape[0] == self._nplws[ikpt - 1] / 2, \
+                    assert Gvec.shape[0] == self._nplws[ikpt - 1] // 2, \
                            'No. of planewaves not consistent for an SOC WAVECAR! %d %d %d' % \
                            (Gvec.shape[0], self._nplws[ikpt -1], np.prod(self._ngrid))
             else:
@@ -420,9 +420,9 @@ class vaspwfc(object):
 
         if self._lgam:
             if self._gam_half == 'z':
-                phi_k = np.zeros((ngrid[0], ngrid[1], ngrid[2]/2 + 1), dtype=np.complex128)
+                phi_k = np.zeros((ngrid[0], ngrid[1], ngrid[2]//2 + 1), dtype=np.complex128)
             else:
-                phi_k = np.zeros((ngrid[0]/2 + 1, ngrid[1], ngrid[2]), dtype=np.complex128)
+                phi_k = np.zeros((ngrid[0]//2 + 1, ngrid[1], ngrid[2]), dtype=np.complex128)
         else:
             phi_k = np.zeros(ngrid, dtype=np.complex128)
 
@@ -434,7 +434,7 @@ class vaspwfc(object):
                 dump = Cg
             else:
                 dump = self.readBandCoeff(ispin, ikpt, iband, norm)
-            nplw = dump.shape[0] / 2
+            nplw = dump.shape[0] // 2
             
             # spinor up
             phi_k[gvec[:,0], gvec[:,1], gvec[:,2]] = dump[:nplw]
@@ -458,8 +458,8 @@ class vaspwfc(object):
                 if self._gam_half == 'z':
                     for ii in range(ngrid[0]):
                         for jj in range(ngrid[1]):
-                            fx = ii if ii < ngrid[0] / 2 + 1 else ii - ngrid[0]
-                            fy = jj if jj < ngrid[1] / 2 + 1 else jj - ngrid[1]
+                            fx = ii if ii < ngrid[0] // 2 + 1 else ii - ngrid[0]
+                            fy = jj if jj < ngrid[1] // 2 + 1 else jj - ngrid[1]
                             if (fy > 0) or (fy == 0 and fx >= 0):
                                 continue
                             phi_k[ii,jj,0] = phi_k[-ii,-jj,0].conjugate()
@@ -470,8 +470,8 @@ class vaspwfc(object):
                 elif self._gam_half == 'x':
                     for jj in range(ngrid[1]):
                         for kk in range(ngrid[2]):
-                            fy = jj if jj < ngrid[1] / 2 + 1 else jj - ngrid[1]
-                            fz = kk if kk < ngrid[2] / 2 + 1 else kk - ngrid[2]
+                            fy = jj if jj < ngrid[1] // 2 + 1 else jj - ngrid[1]
+                            fz = kk if kk < ngrid[2] // 2 + 1 else kk - ngrid[2]
                             if (fy > 0) or (fy == 0 and fz >= 0):
                                 continue
                             phi_k[0,jj,kk] = phi_k[0,-jj,-kk].conjugate()
@@ -702,11 +702,11 @@ class vaspwfc(object):
                     "Minium FT grid size: (%d, %d, %d)" % \
                     (self._ngrid[0], self._ngrid[1], self._ngrid[2])
 
-        fx = [ii if ii < ngrid[0] / 2 + 1 else ii - ngrid[0]
+        fx = [ii if ii < ngrid[0] // 2 + 1 else ii - ngrid[0]
                 for ii in range(ngrid[0])]
-        fy = [jj if jj < ngrid[1] / 2 + 1 else jj - ngrid[1]
+        fy = [jj if jj < ngrid[1] // 2 + 1 else jj - ngrid[1]
                 for jj in range(ngrid[1])]
-        fz = [kk if kk < ngrid[2] / 2 + 1 else kk - ngrid[2]
+        fz = [kk if kk < ngrid[2] // 2 + 1 else kk - ngrid[2]
                 for kk in range(ngrid[2])]
 
         # plane-waves: Reciprocal coordinate 
