@@ -113,12 +113,13 @@ if __name__ == '__main__':
     CS = CubicSpline(x, y, bc_type='natural')
     # CS = interp1d(x, y, kind='cubic')
     xs = np.arange(0.0, 9.1, 0.1)
+    print(CS([0.0, 0.4, 0.3]))
 
-    import matplotlib.pyplot as plt
-
-    plt.plot(x, y, 'o')
-    plt.plot(xs, cs(xs), ls=':', color='r')
-    plt.plot(xs, CS(xs), ls='-', color='b', alpha=0.5)
-    plt.plot(xs, np.sin(xs), ls='-', color='k', alpha=0.5)
-
-    plt.show()
+    # import matplotlib.pyplot as plt
+    #
+    # plt.plot(x, y, 'o')
+    # plt.plot(xs, cs(xs), ls=':', color='r')
+    # plt.plot(xs, CS(xs), ls='-', color='b', alpha=0.5)
+    # plt.plot(xs, np.sin(xs), ls='-', color='k', alpha=0.5)
+    #
+    # plt.show()

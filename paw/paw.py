@@ -222,6 +222,56 @@ class pawpot(object):
         return pstr
 
 
+class nonlr(object):
+    '''
+    Nonlocal projection operator from a real-space radial grid to regular 3d grid.
+    '''
+    pass
+
+
+class nonlq(object):
+    '''
+    Nonlocal projection operator from a reciprocal-space radial grid to regular 3d grid.
+    '''
+    def __init__(
+        r, fr, l, gmax, cell, encut, R0,
+    ):
+        pass
+
+
+class radial2grid(object):
+    '''
+    '''
+
+    def __init__(self,
+                 r, fr, cell, encut,
+                 R0=[0.0, 0.0, 0.0],
+                 # bc_type='natural',
+                 rlog=False,
+                 reciprocal=False):
+        '''
+        inputs
+            r: the coordinate of the radial grid (r-grid)
+            fr: the function values on the r-grid
+            cell:  (3,3) ndarray in units of Angstrom, the basis vectors of the regular grid
+            encut: the energy cutoff, which determines the grid size of the
+                   regurlar grid
+            R0: coordinate of the center of the core region
+            # bc_type: boundary condition to interpolate r/fr on the radial grid
+            rlog: logarithmic radial grid?
+            reciprocal: r/fr defined in reciprocal space?
+        '''
+        from scipy.interpolate import CubicSpline as csp
+
+        if not rlog:
+            if reciprocal:
+                fr_cs = csp(r, fr, bc_type='natural')
+            else:
+                fr_cs = csp(r, fr, bc_type='natural')
+        else:
+            pass
+
+
 if __name__ == '__main__':
     import time
     xx = open('potcar_ti').read()
