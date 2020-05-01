@@ -305,7 +305,134 @@ class nonlr(object):
     '''
     Nonlocal projection operator from a real-space radial grid to regular 3d grid.
     '''
-    pass
+    def __init__(
+        atoms, encut, potcar='POTCAR', k=[0.0, 0.0, 0.0],
+        lgam=False, lsoc=False
+    ):
+        '''
+        input:
+            atoms: ase atom object
+            encut: float, energy cutoff in eV
+            potcar: the PAW POTCAR file of all the elements in atoms
+            k: the k-point vector in fractional coordinate
+        '''
+        self.atoms = atoms
+        self.natoms = len(atoms)
+        self.encut = encut
+        self.kvec = np.asarray(k, dtype=float)
+        self.pawpot = [pawpot(potstr) for potstr in
+                       open(potcar).read().split('End of Dataset')[:-1]]
+        elements, self.elem_cnts = np.unique(atoms.get_chemical_symbols(),
+                                             return_counts=True)
+        assert len(self.elem_cnts) == len(self.pawpot), \
+            "The number of elements in POTCAR and POSCAR does not match!"
+
+        self.elements = list(elements)
+        self.element_idx = [elements.index(s) for s in
+                            atoms.get_chemical_symbols()]
+
+        self.set_fft_grid()
+
+    def set_fft_grid(self):
+        '''
+        Minimum FFT grid size
+        '''
+
+        # real space cell
+        self.Acell = self.atoms.get_cell()
+        self.Anorm = np.linalg.norm(self.Acell, axis=1)
+        # reciprocal space cell
+        self.Bcell = np.linalg.inv(self.Acell).T
+        self.Bnorm = np.linalg.norm(self.Bcell, axis=1)
+
+        CUTOF = np.ceil(
+            sqrt(self.encut / RYTOEV) / (TPI / (self.Anorm / AUTOA))
+        )
+        self._ngrid = np.array(2 * CUTOF + 1, dtype=int)
+
+    def phaser(self):
+        '''
+        Find lattice points contained within the PAW cutoff-sphere for each
+        ion.
+        '''
+        self.ion_grid_idx = []
+        self.ion_grid_dis = []
+        self.ion_crrexp = []
+
+        scaled_positions = self.get_scaled_positions()
+        for iatom in range(self.natoms):
+            ntype = self.element_idx[iatom]
+            ps = self.pawpot[ntype]
+            R0 = scaled_positions[iatom]
+            # PAW cutoff sphere radius
+            rmax = self.pawpot[ntype].proj_rmax
+
+            # restrict to points contained within a cube around the ion
+            # grid position of the ion
+            N0 = np.array(R0 * self._ngrid, dtype=int)
+            # length of the cube
+            ND = np.array(rmax * self.Bnorm * self._ngrid, dtype=int) + 1
+            Dxyz = np.mgrid[N0[0] - ND[0]: N0[0] + ND[0] + 1,
+                            N0[1] - ND[1]: N0[1] + ND[1] + 1,
+                            N0[2] - ND[2]: N0[2] + ND[2] + 1].reshape((3, -1)).T
+            # distance from the grid to the ion position
+            Rr = np.dot((Dxyz / self._ngrid.astype(float)) - R0, self.Acell)
+            RrLen = np.linalg.norm(Rr, axis=1)
+            grid_in_sphere = RrLen < rmax / ps.NPSRNL * (ps.NPSRNL - 1)
+
+            self.ion_grid_idx.append(Dxyz[grid_in_sphere])
+            self.ion_grid_direction.append(Rr[grid_in_sphere])
+            self.ion_grid_distance.append(RrLen[grid_in_sphere])
+            self.ion_crrexp.append(
+                1j * TPI * Rr[grid_in_sphere] * np.dot(self.kvec, self.Bcell)
+            )
+
+    def calc_rproj(self):
+        '''
+        Nonlocal projector for each elements
+        '''
+
+        self.phaser()
+        self.rproj = []
+        for iatom in range(self.natoms):
+            ntype = self.element_idx[iatom]
+            ps = self.pawpot[ntype]
+            tmp = np.zeros((ps.lmmax, self.ion_grid_distance[iatom].shape[0]))
+            iL = 0
+            rproj_radial = sql_r(self.ion_grid_distance[iatom])
+            for l, spl_r in zip(ps.proj_l, ps.spl_rproj):
+                TLP1 = 2 * l + 1
+                tmp[iL:iL+TLP1, :] = (rproj_radial *
+                                      sph_r(self.ion_grid_direction[iatom], l)).T
+                iL += TLP1
+            tmp /= np.sqrt(self.atoms.get_volume())
+        self.rproj.append(tmp)
+
+    def proj(self, wfc_r, whichatom=None):
+        '''
+        '''
+        wfc_r = np.asarray(wfc_r)
+        assert np.allclose(
+            wfc_r.shape, self._ngrid), "Grid size does not match!"
+
+        if whichatom is None:
+            beta = []
+            for iatom in range(self.natoms):
+                ntype = self.element_idx[iatom]
+                gidx = self.ion_grid_idx[iatom]
+                beta += [x for x in np.sum(
+                    wfc_r[gidx[:, 0], gidx[:, 1], gidx[:, 2]] *
+                    self.ion_crrexp[iatom] * self.rprojs[iatom])
+                ]
+        else:
+            ntype = self.element_idx[whichatom]
+            gidx = self.ion_grid_idx[whichatom]
+            beta = [x for x in np.sum(
+                wfc_r[gidx[:, 0], gidx[:, 1], gidx[:, 2]] *
+                self.ion_crrexp[whichatom] * self.rprojs[whichatom])
+            ]
+
+        return np.asarray(beta)
 
 
 class nonlq(object):
@@ -325,7 +452,7 @@ class nonlq(object):
         '''
         self.atoms = atoms
         self.natoms = len(atoms)
-        self.kgrid = np.asarray(k, dtype=float)
+        self.kvec = np.asarray(k, dtype=float)
         self.pawpot = [pawpot(potstr) for potstr in
                        open(potcar).read().split('End of Dataset')[:-1]]
         elements, self.elem_cnts = np.unique(atoms.get_chemical_symbols(),
@@ -341,7 +468,7 @@ class nonlq(object):
         self.nplw = self.Gvec.shape[0]
         # G-vectors in Cartesian coordinate
         self.G = np.dot(
-            self.Gvec + self.kgrid, TPI * self.atoms.get_reciprocal_cell()
+            self.Gvec + self.kvec, TPI * self.atoms.get_reciprocal_cell()
         )
         # G-vectors length
         self.Glen = np.linalg.norm(
@@ -393,7 +520,7 @@ class nonlq(object):
                                 self.Gvec, self.atoms.get_scaled_positions().T
                             ))
 
-    def proj(self, cptwf):
+    def proj(self, cptwf, whichatom=None):
         '''
         Project one single KS wavefunctions onto all the nonlocal reciprocal
         space projectors.
@@ -402,13 +529,20 @@ class nonlq(object):
         cptwf = np.asarray(cptwf)
         assert cptwf.size = self.nplw, "Number of plane waves does not match!"
 
-        beta = []
-        for iatom in range(self.natoms):
-            ntype = self.element_idx[iatom]
-            beta += [x for x in
-                     np.sum(
-                         cptwf * self.crexp[:, iatom] * self.qproj[ntype], axis=1
-                     )]
+        if whichatom is None:
+            beta = []
+            for iatom in range(self.natoms):
+                ntype = self.element_idx[iatom]
+                beta += [x for x in
+                         np.sum(
+                             cptwf * self.crexp[:, iatom] * self.qproj[ntype], axis=1
+                         )]
+        else:
+            ntype = self.element_idx[whichatom]
+            beta = [x for x in
+                    np.sum(
+                        cptwf * self.crexp[:, whichatom] * self.qproj[ntype], axis=1
+                    )]
         return np.asarray(beta)
 
 
