@@ -3,6 +3,7 @@
 import re
 import numpy as np
 from vasp_constant import *
+from sph_harm import sph_r, sph_c
 
 
 def gvectors(cell, encut, kvec, ngrid=None
@@ -94,6 +95,8 @@ class pawpot(object):
         self.read_proj(non_radial_part)
         # read the ae/ps partial waves in the core region
         self.read_partial_wfc(radial_part)
+        # c-spline interpolation of the projector function
+        self.csplines()
 
     def read_proj(self, datastr):
         '''
@@ -282,13 +285,19 @@ class pawpot(object):
     def __str__(self):
         '''
         '''
-        pstr = f"{self.symbol:>3s}\n"
-        pstr += f"\n{'l':>3s}{'rmax':>12s}\n"
+        # pstr = f"{self.symbol:>3s}\n"
+        # pstr += f"\n{'l':>3s}{'rmax':>12s}\n"
+        # pstr += ''.join(
+        #     [f"{self.proj_l[ii]:>3d}{self.proj_rmax:>12.6f}\n"
+        #         for ii in range(self.lmax)]
+        # )
+
+        pstr = "{:>3s}\n".format(self.symbol)
+        pstr += "\n{:>3s}{:>12s}\n".format("l", "rmax")
         pstr += ''.join(
-            [f"{self.proj_l[ii]:>3d}{self.proj_rmax:>12.6f}\n"
+            ["{:>3d}{:>12.6f}\n".format(self.proj_l[ii], self.proj_rmax)
                 for ii in range(self.lmax)]
         )
-
         return pstr
 
 
@@ -304,30 +313,103 @@ class nonlq(object):
     Nonlocal projection operator from a reciprocal-space radial grid to regular 3d grid.
     '''
     def __init__(
-        g, fg, l, cell, encut, gmax,
-        R0=[0.0, 0.0, 0.0],
-        k=[0.0, 0.0, 0.0], plws=None,
+        atoms, encut, potcar='POTCAR', k=[0.0, 0.0, 0.0],
         lgam=False, lsoc=False
     ):
-        from sph_harm import sph_r
-        from scipy.interpolate import CubicSpline as csp
-        # for reciprocal space projector functions, natural boundary condition
-        # (Y'' = 0) is applied at both ends.
-        spl_fg = csp(g, fg, bc_type='natural')
+        '''
+        input:
+            atoms: ase atom object
+            encut: float, energy cutoff in eV
+            potcar: the PAW POTCAR file of all the elements in atoms
+            k: the k-point vector in fractional coordinate
+        '''
+        self.atoms = atoms
+        self.natoms = len(atoms)
+        self.kgrid = np.asarray(k, dtype=float)
+        self.pawpot = [pawpot(potstr) for potstr in
+                       open(potcar).read().split('End of Dataset')[:-1]]
+        elements, self.elem_cnts = np.unique(atoms.get_chemical_symbols(),
+                                             return_counts=True)
+        assert len(self.elem_cnts) == len(self.pawpot), \
+            "The number of elements in POTCAR and POSCAR does not match!"
 
-        Bcell = np.linalg.inv(cell).T     # reciprocal space cell
-        if plws is None:
-            self.G = gvectors(cell, encut, k, lgam=lgam, lsoc=lsoc)
-        else:
-            self.G = np.asarray(plws)
-        k = np.asarray(k)
+        self.elements = list(elements)
+        self.element_idx = [elements.index(s) for s in
+                            atoms.get_chemical_symbols()]
+        # G-vectors in fractional coordinate
+        self.Gvec = gvectors(atoms.cell, encut, k)
+        self.nplw = self.Gvec.shape[0]
+        # G-vectors in Cartesian coordinate
+        self.G = np.dot(
+            self.Gvec + self.kgrid, TPI * self.atoms.get_reciprocal_cell()
+        )
+        # G-vectors length
+        self.Glen = np.linalg.norm(
+            np.dot(
+                self.G, TPI * self.atoms.get_reciprocal_cell()
+            ), axis=1)
 
-        self.Gvec = np.dot(self.G + k[np.newaxis, :], TPI*Bcell)
-        self.Glen = np.linalg.norm(self.Gvec, axis=1)
-        self.fG = spl_fg(self.Glen)
-        self.ylm = sph_r(self.Gvec, l)
+        #
+        self.setylm()
+        self.phase()
+        self.calc_qproj()
 
-        self.qproj = self.fG[:, None] * self.ylm
+    def setylm(self):
+        '''
+         Calculate the real spherical harmonics for a set of G-grid points up to
+         LMAX.
+        '''
+
+        lmax = np.max([p.proj_l.max() for p in self.pawpot])
+        self.ylm = []
+        for l in range(lmax):
+            self.ylm.append(
+                sph_r(self.G, l)
+            )
+
+    def calc_qproj(self):
+        '''
+        Nonlocal projector for each elements
+        '''
+        self.qproj = []
+        for ps in self.pawpot:
+            tmp = np.zeros((ps.lmmax, self.nplw))
+            iL = 0
+            for l, spl_q in zip(ps.proj_l, ps.spl_qproj):
+                TLP1 = 2 * l + 1
+                # radial part of the projector: spl_q(self.G)
+                tmp[iL:iL+TLP1, :] = (spl_q(self.G) * self.ylm[l]).T
+                iL += TLP1
+            tmp /= np.sqrt(self.atoms.get_volume())
+        self.qproj.append(tmp)
+
+    def phase(self):
+        '''
+        Calculates the phasefactor CREXP (exp(iG.R)) for one k-point
+        '''
+
+        self.crexp = np.exp(-1j * TPI *
+                            np.dot(
+                                self.Gvec, self.atoms.get_scaled_positions().T
+                            ))
+
+    def proj(self, cptwf):
+        '''
+        Project one single KS wavefunctions onto all the nonlocal reciprocal
+        space projectors.
+        '''
+
+        cptwf = np.asarray(cptwf)
+        assert cptwf.size = self.nplw, "Number of plane waves does not match!"
+
+        beta = []
+        for iatom in range(self.natoms):
+            ntype = self.element_idx[iatom]
+            beta += [x for x in
+                     np.sum(
+                         cptwf * self.crexp[:, iatom] * self.qproj[ntype], axis=1
+                     )]
+        return np.asarray(beta)
 
 
 class radial2grid(object):

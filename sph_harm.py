@@ -4,7 +4,7 @@ import numpy as np
 from scipy.special import sph_harm
 
 
-def cart2sph(xyz):
+def cart2sph(xyz, epsilon=1E-10):
     '''
     Convert Cartesian coordinate to spherical coordinate.
 
@@ -27,6 +27,8 @@ def cart2sph(xyz):
 
     # the norm
     r = np.linalg.norm(np.c_[x, y, z], axis=1)
+    # in case of zero division
+    r[r < epsilon] = epsilon
 
     # the polar angle
     theta = np.arccos(z / r)
