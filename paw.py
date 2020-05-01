@@ -6,7 +6,7 @@ from vasp_constant import *
 from sph_harm import sph_r, sph_c
 
 
-def gvectors(cell, encut, kvec, ngrid=None
+def gvectors(cell, encut, kvec, ngrid=None,
              lgam=False, gamma_half='x', force_gamma=False,
              lsoc=False):
     '''
@@ -18,7 +18,7 @@ def gvectors(cell, encut, kvec, ngrid=None
     if ngrid is None:
         Anorm = np.linalg.norm(cell, axis=1)
         CUTOF = np.ceil(
-            sqrt(encut / RYTOEV) / (TPI / (Anorm / AUTOA))
+            np.sqrt(encut / RYTOEV) / (TPI / (Anorm / AUTOA))
         )
         ngrid = np.array(2 * CUTOF + 1, dtype=int)
 
@@ -33,7 +33,7 @@ def gvectors(cell, encut, kvec, ngrid=None
           for kk in range(ngrid[2])]
 
     # force_Gamma: consider gamma-only case regardless of the real setting
-    if force_Gamma:
+    if force_gamma:
         lgam = True
     if lgam:
         # parallel gamma version of VASP WAVECAR exclude some planewave
@@ -305,7 +305,7 @@ class nonlr(object):
     '''
     Nonlocal projection operator from a real-space radial grid to regular 3d grid.
     '''
-    def __init__(
+    def __init__(self,
         atoms, encut, potcar='POTCAR', k=[0.0, 0.0, 0.0],
         lgam=False, lsoc=False
     ):
@@ -328,7 +328,7 @@ class nonlr(object):
             "The number of elements in POTCAR and POSCAR does not match!"
 
         self.elements = list(elements)
-        self.element_idx = [elements.index(s) for s in
+        self.element_idx = [self.elements.index(s) for s in
                             atoms.get_chemical_symbols()]
 
         self.set_fft_grid()
@@ -439,7 +439,7 @@ class nonlq(object):
     '''
     Nonlocal projection operator from a reciprocal-space radial grid to regular 3d grid.
     '''
-    def __init__(
+    def __init__(self,
         atoms, encut, potcar='POTCAR', k=[0.0, 0.0, 0.0],
         lgam=False, lsoc=False
     ):
@@ -461,7 +461,7 @@ class nonlq(object):
             "The number of elements in POTCAR and POSCAR does not match!"
 
         self.elements = list(elements)
-        self.element_idx = [elements.index(s) for s in
+        self.element_idx = [self.elements.index(s) for s in
                             atoms.get_chemical_symbols()]
         # G-vectors in fractional coordinate
         self.Gvec = gvectors(atoms.cell, encut, k)
@@ -489,7 +489,7 @@ class nonlq(object):
 
         lmax = np.max([p.proj_l.max() for p in self.pawpot])
         self.ylm = []
-        for l in range(lmax):
+        for l in range(lmax+1):
             self.ylm.append(
                 sph_r(self.G, l)
             )
@@ -504,11 +504,11 @@ class nonlq(object):
             iL = 0
             for l, spl_q in zip(ps.proj_l, ps.spl_qproj):
                 TLP1 = 2 * l + 1
-                # radial part of the projector: spl_q(self.G)
-                tmp[iL:iL+TLP1, :] = (spl_q(self.G) * self.ylm[l]).T
+                # radial part of the projector: spl_q(self.Glen)
+                tmp[iL:iL+TLP1, :] = (spl_q(self.Glen) * self.ylm[l].T)
                 iL += TLP1
             tmp /= np.sqrt(self.atoms.get_volume())
-        self.qproj.append(tmp)
+            self.qproj.append(tmp)
 
     def phase(self):
         '''
@@ -527,12 +527,13 @@ class nonlq(object):
         '''
 
         cptwf = np.asarray(cptwf)
-        assert cptwf.size = self.nplw, "Number of plane waves does not match!"
+        assert cptwf.size == self.nplw, "Number of plane waves does not match!"
 
         if whichatom is None:
             beta = []
             for iatom in range(self.natoms):
                 ntype = self.element_idx[iatom]
+                print(iatom, ntype)
                 beta += [x for x in
                          np.sum(
                              cptwf * self.crexp[:, iatom] * self.qproj[ntype], axis=1

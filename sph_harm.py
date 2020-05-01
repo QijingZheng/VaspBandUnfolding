@@ -71,7 +71,7 @@ def sph_r(xyz, l, m=None):
     u = sph_u_c2r(l)
 
     if m is None:
-        np.dot(ylm_c, u.T).real
+        return np.dot(ylm_c, u.T).real
     else:
         return np.dot(ylm_c, u.T).real[:, m+l]
 
