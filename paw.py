@@ -519,6 +519,15 @@ class nonlq(object):
                             np.dot(
                                 self.Gvec, self.atoms.get_scaled_positions().T
                             ))
+        # i^L is stored in CQFAK
+        self.cqfak = []
+        for itype in range(len(self.elem_cnts)):
+            ps = self.pawpot[itype]
+            tmp = []
+            for l in ps.proj_l:
+                tmp += [l] * (2*l + 1)
+            self.cqfak.append(1j**np.array(tmp))
+
 
     def proj(self, cptwf, whichatom=None):
         '''
@@ -533,16 +542,19 @@ class nonlq(object):
             beta = []
             for iatom in range(self.natoms):
                 ntype = self.element_idx[iatom]
-                print(iatom, ntype)
+                iill = self.cqfak[ntype]
                 beta += [x for x in
                          np.sum(
-                             cptwf * self.crexp[:, iatom] * self.qproj[ntype], axis=1
+                             cptwf * self.crexp[:, iatom] * (self.qproj[ntype] * iill[:, None]),
+                             axis=1
                          )]
         else:
             ntype = self.element_idx[whichatom]
+            iill = self.cqfak[ntype]
             beta = [x for x in
                     np.sum(
-                        cptwf * self.crexp[:, whichatom] * self.qproj[ntype], axis=1
+                        cptwf * self.crexp[:, whichatom] * (self.qproj[ntype] * iill[:, None]),
+                        axis=1
                     )]
         return np.asarray(beta)
 
