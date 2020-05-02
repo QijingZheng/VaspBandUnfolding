@@ -305,10 +305,11 @@ class nonlr(object):
     '''
     Nonlocal projection operator from a real-space radial grid to regular 3d grid.
     '''
+
     def __init__(self,
-        atoms, encut, potcar='POTCAR', k=[0.0, 0.0, 0.0],
-        lgam=False, lsoc=False
-    ):
+                 atoms, encut, potcar='POTCAR', k=[0.0, 0.0, 0.0],
+                 lgam=False, lsoc=False
+                 ):
         '''
         input:
             atoms: ase atom object
@@ -439,10 +440,11 @@ class nonlq(object):
     '''
     Nonlocal projection operator from a reciprocal-space radial grid to regular 3d grid.
     '''
+
     def __init__(self,
-        atoms, encut, potcar='POTCAR', k=[0.0, 0.0, 0.0],
-        lgam=False, lsoc=False
-    ):
+                 atoms, encut, potcar='POTCAR', k=[0.0, 0.0, 0.0],
+                 lgam=False, lsoc=False
+                 ):
         '''
         input:
             atoms: ase atom object
@@ -466,15 +468,12 @@ class nonlq(object):
         # G-vectors in fractional coordinate
         self.Gvec = gvectors(atoms.cell, encut, k)
         self.nplw = self.Gvec.shape[0]
-        # G-vectors in Cartesian coordinate
-        self.G = np.dot(
+        # (k + G)-vectors in Cartesian coordinate
+        self.Gk = np.dot(
             self.Gvec + self.kvec, TPI * self.atoms.get_reciprocal_cell()
         )
         # G-vectors length
-        self.Glen = np.linalg.norm(
-            np.dot(
-                self.G, TPI * self.atoms.get_reciprocal_cell()
-            ), axis=1)
+        self.Glen = np.linalg.norm(self.Gk, axis=1)
 
         #
         self.setylm()
@@ -491,24 +490,8 @@ class nonlq(object):
         self.ylm = []
         for l in range(lmax+1):
             self.ylm.append(
-                sph_r(self.G, l)
+                sph_r(self.Gk, l)
             )
-
-    def calc_qproj(self):
-        '''
-        Nonlocal projector for each elements
-        '''
-        self.qproj = []
-        for ps in self.pawpot:
-            tmp = np.zeros((ps.lmmax, self.nplw))
-            iL = 0
-            for l, spl_q in zip(ps.proj_l, ps.spl_qproj):
-                TLP1 = 2 * l + 1
-                # radial part of the projector: spl_q(self.Glen)
-                tmp[iL:iL+TLP1, :] = (spl_q(self.Glen) * self.ylm[l].T)
-                iL += TLP1
-            tmp /= np.sqrt(self.atoms.get_volume())
-            self.qproj.append(tmp)
 
     def phase(self):
         '''
@@ -528,6 +511,31 @@ class nonlq(object):
                 tmp += [l] * (2*l + 1)
             self.cqfak.append(1j**np.array(tmp))
 
+    def calc_qproj(self):
+        '''
+        Nonlocal projector for each elements
+        '''
+        self.qproj = []
+        for ps in self.pawpot:
+            tmp = np.zeros((ps.lmmax, self.nplw))
+            iL = 0
+            # np.savetxt('pj.{}'.format(ps.symbol), np.c_[ps.proj_qgrid, ps.qprojs.T])
+            # xxx = np.zeros((ps.lmmax + 1, self.nplw))
+            # xxx[0] = self.Glen
+            ii = 1
+            for l, spl_q in zip(ps.proj_l, ps.spl_qproj):
+                TLP1 = 2 * l + 1
+                # radial part of the projector: spl_q(self.Glen)
+                tmp[iL:iL+TLP1, :] = (spl_q(self.Glen) * self.ylm[l].T)
+                iL += TLP1
+
+                # xxx[ii] = spl_q(self.Glen)
+                # ii += 1
+            # np.savetxt('pj.csp.{}'.format(ps.symbol), xxx.T)
+
+            tmp /= np.sqrt(self.atoms.get_volume())
+            self.qproj.append(tmp)
+
 
     def proj(self, cptwf, whichatom=None):
         '''
@@ -545,7 +553,8 @@ class nonlq(object):
                 iill = self.cqfak[ntype]
                 beta += [x for x in
                          np.sum(
-                             cptwf * self.crexp[:, iatom] * (self.qproj[ntype] * iill[:, None]),
+                             cptwf * self.crexp[:, iatom] *
+                             (self.qproj[ntype] * iill[:, None]),
                              axis=1
                          )]
         else:
@@ -553,7 +562,8 @@ class nonlq(object):
             iill = self.cqfak[ntype]
             beta = [x for x in
                     np.sum(
-                        cptwf * self.crexp[:, whichatom] * (self.qproj[ntype] * iill[:, None]),
+                        cptwf * self.crexp[:, whichatom] *
+                        (self.qproj[ntype] * iill[:, None]),
                         axis=1
                     )]
         return np.asarray(beta)
