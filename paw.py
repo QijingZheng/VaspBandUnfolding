@@ -322,7 +322,7 @@ class nonlr(object):
         self.encut = encut
         self.kvec = np.asarray(k, dtype=float)
         self.pawps = [pawpot(potstr) for potstr in
-                       open(potcar).read().split('End of Dataset')[:-1]]
+                      open(potcar).read().split('End of Dataset')[:-1]]
         elements, self.elem_cnts = np.unique(atoms.get_chemical_symbols(),
                                              return_counts=True)
         assert len(self.elem_cnts) == len(self.pawps), \
@@ -456,7 +456,7 @@ class nonlq(object):
         self.natoms = len(atoms)
         self.kvec = np.asarray(k, dtype=float)
         self.pawps = [pawpot(potstr) for potstr in
-                       open(potcar).read().split('End of Dataset')[:-1]]
+                      open(potcar).read().split('End of Dataset')[:-1]]
         elements, self.elem_cnts = np.unique(atoms.get_chemical_symbols(),
                                              return_counts=True)
         assert len(self.elem_cnts) == len(self.pawps), \
@@ -497,36 +497,46 @@ class nonlq(object):
         '''
         Calculates the phasefactor CREXP (exp(iG.R)) for one k-point
         '''
-
-        self.crexp = np.exp(-1j * TPI *
+        #####################################################################
+        # Mind the sigh of "1j" here. I used "-1j" at first, which took me a
+        # long long time to figure out what goes wrong!
+        #####################################################################
+        self.crexp = np.exp(1j * TPI *
                             np.dot(
                                 self.Gvec, self.atoms.get_scaled_positions().T
                             ))
         # i^L is stored in CQFAK
-        self.cqfak = []
-        for itype in range(len(self.elem_cnts)):
-            ps = self.pawps[itype]
-            tmp = []
-            for l in ps.proj_l:
-                tmp += [l] * (2*l + 1)
-            self.cqfak.append(1j**np.array(tmp))
+        self.cqfak = [
+            1j ** np.array([
+                l for l in ps.proj_l
+                for ii in range(2 * l + 1)
+            ])
+            for ps in self.pawps
+        ]
 
     def calc_qproj(self):
         '''
-        Nonlocal projector for each elements
+        Nonlocal projector for each type of element.
         '''
         self.qproj = []
         for ps in self.pawps:
-            tmp = np.zeros((ps.lmmax, self.nplw))
-            iL = 0
             # np.savetxt('pj.{}'.format(ps.symbol), np.c_[ps.proj_qgrid, ps.qprojs.T])
             # xxx = np.zeros((ps.lmmax + 1, self.nplw))
             # xxx[0] = self.Glen
-            ii = 1
+            # ii = 1
+
+            # find out those | G + k | <= gmax of reciprocal projectors
+            G_within_gmax = (self.Glen <= ps.proj_gmax)
+
+            tmp = np.zeros((ps.lmmax, self.nplw))
+            iL = 0
             for l, spl_q in zip(ps.proj_l, ps.spl_qproj):
                 TLP1 = 2 * l + 1
                 # radial part of the projector: spl_q(self.Glen)
-                tmp[iL:iL+TLP1, :] = (spl_q(self.Glen) * self.ylm[l].T)
+                # spherical harmonics of angular momentum l: ylm[l]
+                tmp[iL:iL+TLP1, G_within_gmax] = spl_q(self.Glen[G_within_gmax]) *\
+                    self.ylm[l].T[:, G_within_gmax]
+
                 iL += TLP1
 
                 # xxx[ii] = spl_q(self.Glen)
@@ -535,7 +545,6 @@ class nonlq(object):
 
             tmp /= np.sqrt(self.atoms.get_volume())
             self.qproj.append(tmp)
-
 
     def proj(self, cptwf, whichatom=None):
         '''
