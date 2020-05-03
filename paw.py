@@ -321,11 +321,11 @@ class nonlr(object):
         self.natoms = len(atoms)
         self.encut = encut
         self.kvec = np.asarray(k, dtype=float)
-        self.pawpot = [pawpot(potstr) for potstr in
+        self.pawps = [pawpot(potstr) for potstr in
                        open(potcar).read().split('End of Dataset')[:-1]]
         elements, self.elem_cnts = np.unique(atoms.get_chemical_symbols(),
                                              return_counts=True)
-        assert len(self.elem_cnts) == len(self.pawpot), \
+        assert len(self.elem_cnts) == len(self.pawps), \
             "The number of elements in POTCAR and POSCAR does not match!"
 
         self.elements = list(elements)
@@ -363,10 +363,10 @@ class nonlr(object):
         scaled_positions = self.get_scaled_positions()
         for iatom in range(self.natoms):
             ntype = self.element_idx[iatom]
-            ps = self.pawpot[ntype]
+            ps = self.pawps[ntype]
             R0 = scaled_positions[iatom]
             # PAW cutoff sphere radius
-            rmax = self.pawpot[ntype].proj_rmax
+            rmax = self.pawps[ntype].proj_rmax
 
             # restrict to points contained within a cube around the ion
             # grid position of the ion
@@ -397,7 +397,7 @@ class nonlr(object):
         self.rproj = []
         for iatom in range(self.natoms):
             ntype = self.element_idx[iatom]
-            ps = self.pawpot[ntype]
+            ps = self.pawps[ntype]
             tmp = np.zeros((ps.lmmax, self.ion_grid_distance[iatom].shape[0]))
             iL = 0
             rproj_radial = sql_r(self.ion_grid_distance[iatom])
@@ -455,11 +455,11 @@ class nonlq(object):
         self.atoms = atoms
         self.natoms = len(atoms)
         self.kvec = np.asarray(k, dtype=float)
-        self.pawpot = [pawpot(potstr) for potstr in
+        self.pawps = [pawpot(potstr) for potstr in
                        open(potcar).read().split('End of Dataset')[:-1]]
         elements, self.elem_cnts = np.unique(atoms.get_chemical_symbols(),
                                              return_counts=True)
-        assert len(self.elem_cnts) == len(self.pawpot), \
+        assert len(self.elem_cnts) == len(self.pawps), \
             "The number of elements in POTCAR and POSCAR does not match!"
 
         self.elements = list(elements)
@@ -486,7 +486,7 @@ class nonlq(object):
          LMAX.
         '''
 
-        lmax = np.max([p.proj_l.max() for p in self.pawpot])
+        lmax = np.max([p.proj_l.max() for p in self.pawps])
         self.ylm = []
         for l in range(lmax+1):
             self.ylm.append(
@@ -505,7 +505,7 @@ class nonlq(object):
         # i^L is stored in CQFAK
         self.cqfak = []
         for itype in range(len(self.elem_cnts)):
-            ps = self.pawpot[itype]
+            ps = self.pawps[itype]
             tmp = []
             for l in ps.proj_l:
                 tmp += [l] * (2*l + 1)
@@ -516,7 +516,7 @@ class nonlq(object):
         Nonlocal projector for each elements
         '''
         self.qproj = []
-        for ps in self.pawpot:
+        for ps in self.pawps:
             tmp = np.zeros((ps.lmmax, self.nplw))
             iL = 0
             # np.savetxt('pj.{}'.format(ps.symbol), np.c_[ps.proj_qgrid, ps.qprojs.T])
