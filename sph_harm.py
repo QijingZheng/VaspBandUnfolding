@@ -85,6 +85,10 @@ def sph_u_c2r(l):
     U_R2C is the conjugate transpose of U_C2R
     '''
 
+    # A strange bug:
+    # https://stackoverflow.com/questions/9887549/negative-exponent-with-numpy-array-operand/42776488
+    l = int(l)
+
     TLP1 = 2 * l + 1
     U_C2R = np.zeros((TLP1, TLP1), dtype=complex)
 
