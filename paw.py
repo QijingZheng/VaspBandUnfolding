@@ -438,7 +438,23 @@ class nonlr(object):
 
 class nonlq(object):
     '''
-    Nonlocal projection operator from a reciprocal-space radial grid to regular 3d grid.
+    Reciprocal space presentation of the nonlocal projector functions on a
+    plane-waves grid.
+
+        p_{l,m; R}(G + k) = (1. / sqrt(Omega) ) *\
+                            i^l * f(G + k) * ylm(G + k) * exp(i(G+k)*R)
+
+    where "f(G + k)" is the radial part of the reciprocal projector functions,
+    which are stored in POTCAR file. "ylm(G+k)" is the real spherical harmonics
+    with corresponding "l" and "m". "Omega" is the volume of the cell. The phase
+    factor of "exp(i(G+k)*R)" is stored in "crexp". The "i^l" is stored in
+    "cqfak".
+
+    The application of the projector functions on the pseudo-wavefunction can
+    then be obtained: C_n = < p_{l,m; R} | \phi_{n,k} >
+        
+        C_n = \sum_G C_{n,k}(G + k) * p_{l,m}(G + k)
+        
     '''
 
     def __init__(self,
@@ -495,7 +511,7 @@ class nonlq(object):
 
     def phase(self):
         '''
-        Calculates the phasefactor CREXP (exp(iG.R)) for one k-point
+        Calculates the phasefactor CREXP (exp(i(G + k).R)) for one k-point
         '''
         #####################################################################
         # Mind the sigh of "1j" here. I used "-1j" at first, which took me a

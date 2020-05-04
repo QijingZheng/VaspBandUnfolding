@@ -110,7 +110,7 @@ def sph_u_r2c(l):
     return sph_u_c2r(l).conj().T
 
 
-def show_sph_harm(m, l, real=True, N=50):
+def show_sph_harm(l, m, real=True, N=50):
     '''
     Show the spherical harmonics on a unit sphere
     '''
@@ -157,4 +157,21 @@ def show_sph_harm(m, l, real=True, N=50):
 
 
 if __name__ == "__main__":
-    show_sph_harm(m=-2, l=3, real=False)
+    show_sph_harm(l=1, m=0, real=False)
+
+    # N = 50
+    # theta = np.linspace(0, np.pi, N)
+    # phi = np.linspace(0, 2*np.pi, N)
+    # theta, phi = np.meshgrid(theta, phi)
+    #
+    # # The Cartesian coordinates of the unit sphere
+    # x = np.sin(theta) * np.cos(phi)
+    # y = np.sin(theta) * np.sin(phi)
+    # z = np.cos(theta)
+    # xyz = np.c_[x.ravel(), y.ravel(), z.ravel()]
+    #
+    # fac = 1. / (np.sqrt(np.pi) * 2)
+    # h0 = sph_r(xyz, l=2, m=0)
+    # h1 = (fac * np.sqrt(5.)/2.) * (3*xyz[:,2]**2-1)
+    # hd = h1 - h0
+    # print(hd.max(), hd.min())
