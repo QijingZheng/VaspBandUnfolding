@@ -321,11 +321,11 @@ class nonlr(object):
         self.natoms = len(atoms)
         self.encut = encut
         self.kvec = np.asarray(k, dtype=float)
-        self.pawps = [pawpot(potstr) for potstr in
+        self.pawpp = [pawpot(potstr) for potstr in
                       open(potcar).read().split('End of Dataset')[:-1]]
         elements, self.elem_cnts = np.unique(atoms.get_chemical_symbols(),
                                              return_counts=True)
-        assert len(self.elem_cnts) == len(self.pawps), \
+        assert len(self.elem_cnts) == len(self.pawpp), \
             "The number of elements in POTCAR and POSCAR does not match!"
 
         self.elements = list(elements)
@@ -333,6 +333,8 @@ class nonlr(object):
                             atoms.get_chemical_symbols()]
 
         self.set_fft_grid()
+        self.phaser()
+        self.calc_rproj()
 
     def set_fft_grid(self):
         '''
@@ -347,7 +349,7 @@ class nonlr(object):
         self.Bnorm = np.linalg.norm(self.Bcell, axis=1)
 
         CUTOF = np.ceil(
-            sqrt(self.encut / RYTOEV) / (TPI / (self.Anorm / AUTOA))
+            np.sqrt(self.encut / RYTOEV) / (TPI / (self.Anorm / AUTOA))
         )
         self._ngrid = np.array(2 * CUTOF + 1, dtype=int)
 
@@ -357,16 +359,20 @@ class nonlr(object):
         ion.
         '''
         self.ion_grid_idx = []
-        self.ion_grid_dis = []
+        self.ion_grid_direction = []
+        self.ion_grid_distance = []
         self.ion_crrexp = []
 
-        scaled_positions = self.get_scaled_positions()
+        scaled_positions = self.atoms.get_scaled_positions()
         for iatom in range(self.natoms):
+            # the type of the ion
             ntype = self.element_idx[iatom]
-            ps = self.pawps[ntype]
+            # the paw pp of the ion
+            pp = self.pawpp[ntype]
+            # the positon of the ion in fractional coordinate
             R0 = scaled_positions[iatom]
-            # PAW cutoff sphere radius
-            rmax = self.pawps[ntype].proj_rmax
+            # PAW cutoff sphere radius of the ion
+            rmax = pp.proj_rmax
 
             # restrict to points contained within a cube around the ion
             # grid position of the ion
@@ -376,38 +382,40 @@ class nonlr(object):
             Dxyz = np.mgrid[N0[0] - ND[0]: N0[0] + ND[0] + 1,
                             N0[1] - ND[1]: N0[1] + ND[1] + 1,
                             N0[2] - ND[2]: N0[2] + ND[2] + 1].reshape((3, -1)).T
-            # distance from the grid to the ion position
-            Rr = np.dot((Dxyz / self._ngrid.astype(float)) - R0, self.Acell)
-            RrLen = np.linalg.norm(Rr, axis=1)
-            grid_in_sphere = RrLen < rmax / ps.NPSRNL * (ps.NPSRNL - 1)
+            # print(self._ngrid, Dxyz.max(),  Dxyz.min())
+            # distance from the grid to the ion position: r - R0
+            rR = np.dot((Dxyz / self._ngrid.astype(float)) - R0, self.Acell)
+            rRLen = np.linalg.norm(rR, axis=1)
+            grid_in_sphere = rRLen < (rmax / pp.NPSRNL * (pp.NPSRNL - 1))
 
-            self.ion_grid_idx.append(Dxyz[grid_in_sphere])
-            self.ion_grid_direction.append(Rr[grid_in_sphere])
-            self.ion_grid_distance.append(RrLen[grid_in_sphere])
+            self.ion_grid_idx.append(Dxyz[grid_in_sphere] % self._ngrid)
+            self.ion_grid_direction.append(rR[grid_in_sphere])
+            self.ion_grid_distance.append(rRLen[grid_in_sphere])
             self.ion_crrexp.append(
-                1j * TPI * Rr[grid_in_sphere] * np.dot(self.kvec, self.Bcell)
-            )
+                np.exp(1j * TPI * np.sum(
+                    rR[grid_in_sphere] * np.dot(self.kvec, self.Bcell),
+                    axis=1)))
 
     def calc_rproj(self):
         '''
         Nonlocal projector for each elements
         '''
 
-        self.phaser()
         self.rproj = []
         for iatom in range(self.natoms):
             ntype = self.element_idx[iatom]
-            ps = self.pawps[ntype]
-            tmp = np.zeros((ps.lmmax, self.ion_grid_distance[iatom].shape[0]))
+            pp = self.pawpp[ntype]
+
+            tmp = np.zeros((pp.lmmax, self.ion_grid_distance[iatom].shape[0]))
             iL = 0
-            rproj_radial = sql_r(self.ion_grid_distance[iatom])
-            for l, spl_r in zip(ps.proj_l, ps.spl_rproj):
+            for l, spl_r in zip(pp.proj_l, pp.spl_rproj):
                 TLP1 = 2 * l + 1
+                rproj_radial = spl_r(self.ion_grid_distance[iatom])
                 tmp[iL:iL+TLP1, :] = (rproj_radial *
-                                      sph_r(self.ion_grid_direction[iatom], l)).T
+                                      sph_r(self.ion_grid_direction[iatom], l).T)
                 iL += TLP1
             tmp /= np.sqrt(self.atoms.get_volume())
-        self.rproj.append(tmp)
+            self.rproj.append(tmp)
 
     def proj(self, wfc_r, whichatom=None):
         '''
@@ -421,16 +429,20 @@ class nonlr(object):
             for iatom in range(self.natoms):
                 ntype = self.element_idx[iatom]
                 gidx = self.ion_grid_idx[iatom]
+                # print(self.ion_crrexp[iatom].shape)
+                # print(self.rproj[iatom].shape)
+                # print(wfc_r[gidx[:, 0], gidx[:, 1], gidx[:, 2]].shape)
                 beta += [x for x in np.sum(
                     wfc_r[gidx[:, 0], gidx[:, 1], gidx[:, 2]] *
-                    self.ion_crrexp[iatom] * self.rprojs[iatom])
+                    self.ion_crrexp[iatom] * self.rproj[iatom],
+                    axis=1)
                 ]
         else:
             ntype = self.element_idx[whichatom]
             gidx = self.ion_grid_idx[whichatom]
             beta = [x for x in np.sum(
                 wfc_r[gidx[:, 0], gidx[:, 1], gidx[:, 2]] *
-                self.ion_crrexp[whichatom] * self.rprojs[whichatom])
+                self.ion_crrexp[whichatom] * self.rproj[whichatom])
             ]
 
         return np.asarray(beta)
@@ -452,9 +464,9 @@ class nonlq(object):
 
     The application of the projector functions on the pseudo-wavefunction can
     then be obtained: C_n = < p_{l,m; R} | \phi_{n,k} >
-        
+
         C_n = \sum_G C_{n,k}(G + k) * p_{l,m}(G + k)
-        
+
     '''
 
     def __init__(self,
@@ -471,11 +483,11 @@ class nonlq(object):
         self.atoms = atoms
         self.natoms = len(atoms)
         self.kvec = np.asarray(k, dtype=float)
-        self.pawps = [pawpot(potstr) for potstr in
+        self.pawpp = [pawpot(potstr) for potstr in
                       open(potcar).read().split('End of Dataset')[:-1]]
         elements, self.elem_cnts = np.unique(atoms.get_chemical_symbols(),
                                              return_counts=True)
-        assert len(self.elem_cnts) == len(self.pawps), \
+        assert len(self.elem_cnts) == len(self.pawpp), \
             "The number of elements in POTCAR and POSCAR does not match!"
 
         self.elements = list(elements)
@@ -502,7 +514,7 @@ class nonlq(object):
          LMAX.
         '''
 
-        lmax = np.max([p.proj_l.max() for p in self.pawps])
+        lmax = np.max([p.proj_l.max() for p in self.pawpp])
         self.ylm = []
         for l in range(lmax+1):
             self.ylm.append(
@@ -524,10 +536,10 @@ class nonlq(object):
         # i^L is stored in CQFAK
         self.cqfak = [
             1j ** np.array([
-                l for l in ps.proj_l
+                l for l in pp.proj_l
                 for ii in range(2 * l + 1)
             ])
-            for ps in self.pawps
+            for pp in self.pawpp
         ]
 
     def calc_qproj(self):
@@ -535,18 +547,18 @@ class nonlq(object):
         Nonlocal projector for each type of element.
         '''
         self.qproj = []
-        for ps in self.pawps:
-            # np.savetxt('pj.{}'.format(ps.symbol), np.c_[ps.proj_qgrid, ps.qprojs.T])
-            # xxx = np.zeros((ps.lmmax + 1, self.nplw))
+        for pp in self.pawpp:
+            # np.savetxt('pj.{}'.format(pp.symbol), np.c_[pp.proj_qgrid, pp.qprojs.T])
+            # xxx = np.zeros((pp.lmmax + 1, self.nplw))
             # xxx[0] = self.Glen
             # ii = 1
 
             # find out those | G + k | <= gmax of reciprocal projectors
-            G_within_gmax = (self.Glen <= ps.proj_gmax)
+            G_within_gmax = (self.Glen <= pp.proj_gmax)
 
-            tmp = np.zeros((ps.lmmax, self.nplw))
+            tmp = np.zeros((pp.lmmax, self.nplw))
             iL = 0
-            for l, spl_q in zip(ps.proj_l, ps.spl_qproj):
+            for l, spl_q in zip(pp.proj_l, pp.spl_qproj):
                 TLP1 = 2 * l + 1
                 # radial part of the projector: spl_q(self.Glen)
                 # spherical harmonics of angular momentum l: ylm[l]
@@ -557,7 +569,7 @@ class nonlq(object):
 
                 # xxx[ii] = spl_q(self.Glen)
                 # ii += 1
-            # np.savetxt('pj.csp.{}'.format(ps.symbol), xxx.T)
+            # np.savetxt('pj.csp.{}'.format(pp.symbol), xxx.T)
 
             tmp /= np.sqrt(self.atoms.get_volume())
             self.qproj.append(tmp)
