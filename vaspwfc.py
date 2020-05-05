@@ -796,8 +796,7 @@ class vaspwfc(object):
                                         iband=iband+1,
                                         ngrid=ngrid,
                                         gvec=igvec,
-                                        Cg=phi_q,
-                                        norm=True) * normFac
+                                        Cg=phi_q) * normFac
                     # grad^2 \phi in reciprocal space
                     lap_phi_q = -gk2 * phi_q
                     # grad^2 \phi in real space
