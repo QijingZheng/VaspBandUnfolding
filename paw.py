@@ -303,7 +303,20 @@ class pawpotcar(object):
 
 class nonlr(object):
     '''
-    Nonlocal projection operator from a real-space radial grid to regular 3d grid.
+    Real space presentation of the nonlocal projector functions on a regular 3d grid.
+
+        p_{l,m}(r - R) = sqrt(Omega) * f(r - R) * ylm(r - R) * exp(ik*(r - R))
+
+    where "f(r - R)" is the radial part of the real-space projector functions,
+    which are stored in POTCAR file. "ylm(r - R)" is the real spherical harmonics
+    with corresponding "l" and "m". "Omega" is the volume of the cell. The phase
+    factor of "exp(ik*(r - R))" is stored in "crrexp".
+
+    The application of the projector functions on the pseudo-wavefunction can
+    then be obtained: C_n = < p_{l,m}(r - R) | \phi_{n,k} >
+
+        C_n = \sum_{grid with aug sphere} phi(r) * p_{l,m}(r - R)
+
     '''
 
     def __init__(self,
