@@ -333,7 +333,7 @@ class nonlr(object):
                             atoms.get_chemical_symbols()]
 
         self.set_fft_grid()
-        self.phaser()
+        self.rphase()
         self.calc_rproj()
 
     def set_fft_grid(self):
@@ -351,9 +351,13 @@ class nonlr(object):
         CUTOF = np.ceil(
             np.sqrt(self.encut / RYTOEV) / (TPI / (self.Anorm / AUTOA))
         )
-        self._ngrid = np.array(2 * CUTOF + 1, dtype=int)
+        ################################################################################
+        # In order to compare with VASP Normalcar, the grid size must be exactly
+        # the same!
+        ################################################################################
+        self._ngrid = np.array(2 * CUTOF + 1, dtype=int) * 2
 
-    def phaser(self):
+    def rphase(self):
         '''
         Find lattice points contained within the PAW cutoff-sphere for each
         ion.
@@ -382,14 +386,24 @@ class nonlr(object):
             Dxyz = np.mgrid[N0[0] - ND[0]: N0[0] + ND[0] + 1,
                             N0[1] - ND[1]: N0[1] + ND[1] + 1,
                             N0[2] - ND[2]: N0[2] + ND[2] + 1].reshape((3, -1)).T
+            # np.savetxt('dxyz.txt', Dxyz, fmt="%5d")
             # print(self._ngrid, Dxyz.max(),  Dxyz.min())
+
+            # distance from the grid to the ion position: r - R0, fractional
+            # coordinate
+            # rR_d = Dxyz # / self._ngrid.astype(float)
+            # print(rR_d.max(), rR_d.min())
+
             # distance from the grid to the ion position: r - R0
             rR = np.dot((Dxyz / self._ngrid.astype(float)) - R0, self.Acell)
+            # print(rR.max(), rR.min(), rmax, self.Anorm)
             rRLen = np.linalg.norm(rR, axis=1)
-            grid_in_sphere = rRLen < (rmax / pp.NPSRNL * (pp.NPSRNL - 1))
+            grid_in_sphere = rRLen <= (rmax / pp.NPSRNL * (pp.NPSRNL - 1))
+            # print(rRLen[grid_in_sphere].max(), rmax)
 
             self.ion_grid_idx.append(Dxyz[grid_in_sphere] % self._ngrid)
             self.ion_grid_direction.append(rR[grid_in_sphere])
+            np.savetxt('rR{:d}'.format(iatom), rR[grid_in_sphere], fmt='%8.4f')
             self.ion_grid_distance.append(rRLen[grid_in_sphere])
             self.ion_crrexp.append(
                 np.exp(1j * TPI * np.sum(
@@ -401,21 +415,38 @@ class nonlr(object):
         Nonlocal projector for each elements
         '''
 
-        self.rproj = []
+        self.rproj_atoms = []
         for iatom in range(self.natoms):
             ntype = self.element_idx[iatom]
             pp = self.pawpp[ntype]
+            # number of grid points in the sphere
+            irmax = self.ion_grid_distance[iatom].shape[0]
 
-            tmp = np.zeros((pp.lmmax, self.ion_grid_distance[iatom].shape[0]))
+            tmp = np.zeros((pp.lmmax, irmax))
+            rproj_ylm = [
+                sph_r(self.ion_grid_direction[iatom], l).T
+                for l in range(pp.proj_l.max()+1)
+            ]
+
+            # np.savetxt('pj.{}'.format(pp.symbol), np.c_[pp.proj_rgrid, pp.rprojs.T])
+            # xxx = np.zeros((pp.lmmax + 1, irmax))
+            # xxx[0] = self.ion_grid_distance[iatom]
+            # ii = 1
+
             iL = 0
             for l, spl_r in zip(pp.proj_l, pp.spl_rproj):
                 TLP1 = 2 * l + 1
                 rproj_radial = spl_r(self.ion_grid_distance[iatom])
-                tmp[iL:iL+TLP1, :] = (rproj_radial *
-                                      sph_r(self.ion_grid_direction[iatom], l).T)
+                tmp[iL:iL+TLP1, :] = rproj_radial * rproj_ylm[l]
                 iL += TLP1
-            tmp /= np.sqrt(self.atoms.get_volume())
-            self.rproj.append(tmp)
+
+            #     xxx[ii] = rproj_radial
+            #     ii += 1
+            # np.savetxt('pj.csp.{}{}'.format(pp.symbol, iatom), xxx.T)
+
+            # For reciprocal space projectors, the factor is sqrt(1 / Omega)
+            tmp *= np.sqrt(self.atoms.get_volume())
+            self.rproj_atoms.append(tmp)
 
     def proj(self, wfc_r, whichatom=None):
         '''
@@ -427,22 +458,17 @@ class nonlr(object):
         if whichatom is None:
             beta = []
             for iatom in range(self.natoms):
-                ntype = self.element_idx[iatom]
                 gidx = self.ion_grid_idx[iatom]
-                # print(self.ion_crrexp[iatom].shape)
-                # print(self.rproj[iatom].shape)
-                # print(wfc_r[gidx[:, 0], gidx[:, 1], gidx[:, 2]].shape)
                 beta += [x for x in np.sum(
                     wfc_r[gidx[:, 0], gidx[:, 1], gidx[:, 2]] *
-                    self.ion_crrexp[iatom] * self.rproj[iatom],
+                    self.ion_crrexp[iatom] * self.rproj_atoms[iatom],
                     axis=1)
                 ]
         else:
-            ntype = self.element_idx[whichatom]
             gidx = self.ion_grid_idx[whichatom]
             beta = [x for x in np.sum(
                 wfc_r[gidx[:, 0], gidx[:, 1], gidx[:, 2]] *
-                self.ion_crrexp[whichatom] * self.rproj[whichatom])
+                self.ion_crrexp[whichatom] * self.rproj_atoms[whichatom])
             ]
 
         return np.asarray(beta)
