@@ -75,7 +75,7 @@ def gvectors(cell, encut, kvec, ngrid=None,
     return np.asarray(Gvec, dtype=int)
 
 
-class pawpot(object):
+class pawpotcar(object):
     '''
     Read projector functions and ae/ps partialwaves from VASP PBE POTCAR.
     '''
@@ -322,7 +322,7 @@ class nonlr(object):
         self.natoms = len(atoms)
         self.encut = encut
         self.kvec = np.asarray(k, dtype=float)
-        self.pawpp = [pawpot(potstr) for potstr in
+        self.pawpp = [pawpotcar(potstr) for potstr in
                       open(potcar).read().split('End of Dataset')[:-1]]
         elements, self.elem_cnts = np.unique(atoms.get_chemical_symbols(),
                                              return_counts=True)
@@ -513,7 +513,7 @@ class nonlq(object):
         self.atoms = atoms
         self.natoms = len(atoms)
         self.kvec = np.asarray(k, dtype=float)
-        self.pawpp = [pawpot(potstr) for potstr in
+        self.pawpp = [pawpotcar(potstr) for potstr in
                       open(potcar).read().split('End of Dataset')[:-1]]
         elements, self.elem_cnts = np.unique(atoms.get_chemical_symbols(),
                                              return_counts=True)
@@ -674,7 +674,7 @@ if __name__ == '__main__':
     xx = open('paw/potcar_ti').read()
 
     t0 = time.time()
-    ps = pawpot(xx)
+    ps = pawpotcar(xx)
 
     # t1 = time.time()
     # ps.csplines()
