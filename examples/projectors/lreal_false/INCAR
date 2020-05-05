@@ -1,0 +1,36 @@
+General
+  SYSTEM = VaspCalc
+    PREC = High
+#    ENCUT = 400 eV
+   ISPIN = 1
+  ISTART = 1
+  ICHARG = 11
+
+Ionic Relaxation
+#     ISYM = 0
+  IBRION = -1
+     NSW = 0
+#     ISIF = 2
+#   EDIFFG = -1E-2
+
+Electronic relaxation
+    NPAR = 4
+#    IALGO = 38
+    ALGO = Fast
+  NELMIN = 4
+    NELM = 400
+   EDIFF = 1E-7
+  ISMEAR = 0
+   SIGMA = 0.1
+  LORBIT = 11
+  NBANDS = 16
+   LREAL = .FALSE.
+
+Writing Flag
+  NWRITE = 1
+   LWAVE = .TRUE.
+  LCHARG = .TRUE.
+#    LVTOT = .TRUE.
+
+# VDW-D2
+    IVDW = .TRUE.

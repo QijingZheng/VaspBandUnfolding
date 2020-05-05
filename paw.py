@@ -308,6 +308,7 @@ class nonlr(object):
 
     def __init__(self,
                  atoms, encut, potcar='POTCAR', k=[0.0, 0.0, 0.0],
+                 ngrid=None,
                  lgam=False, lsoc=False
                  ):
         '''
@@ -332,11 +333,11 @@ class nonlr(object):
         self.element_idx = [self.elements.index(s) for s in
                             atoms.get_chemical_symbols()]
 
-        self.set_fft_grid()
+        self.set_fft_grid(ngrid=ngrid)
         self.rphase()
         self.calc_rproj()
 
-    def set_fft_grid(self):
+    def set_fft_grid(self, ngrid):
         '''
         Minimum FFT grid size
         '''
@@ -348,14 +349,17 @@ class nonlr(object):
         self.Bcell = np.linalg.inv(self.Acell).T
         self.Bnorm = np.linalg.norm(self.Bcell, axis=1)
 
-        CUTOF = np.ceil(
-            np.sqrt(self.encut / RYTOEV) / (TPI / (self.Anorm / AUTOA))
-        )
-        ################################################################################
-        # In order to compare with VASP Normalcar, the grid size must be exactly
-        # the same!
-        ################################################################################
-        self._ngrid = np.array(2 * CUTOF + 1, dtype=int) * 2
+        if ngrid is None:
+            CUTOF = np.ceil(
+                np.sqrt(self.encut / RYTOEV) / (TPI / (self.Anorm / AUTOA))
+            )
+            ################################################################################
+            # In order to compare with VASP Normalcar, the grid size must be exactly
+            # the same!
+            ################################################################################
+            self._ngrid = np.array(2 * CUTOF + 1, dtype=int) * 2
+        else:
+            self._ngrid = np.array(ngrid, dtype=int)
 
     def rphase(self):
         '''
@@ -403,7 +407,7 @@ class nonlr(object):
 
             self.ion_grid_idx.append(Dxyz[grid_in_sphere] % self._ngrid)
             self.ion_grid_direction.append(rR[grid_in_sphere])
-            np.savetxt('rR{:d}'.format(iatom), rR[grid_in_sphere], fmt='%8.4f')
+            # np.savetxt('rR{:d}'.format(iatom), rR[grid_in_sphere], fmt='%8.4f')
             self.ion_grid_distance.append(rRLen[grid_in_sphere])
             self.ion_crrexp.append(
                 np.exp(1j * TPI * np.sum(
