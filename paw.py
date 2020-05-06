@@ -315,7 +315,7 @@ class nonlr(object):
     The application of the projector functions on the pseudo-wavefunction can
     then be obtained: C_n = < p_{l,m}(r - R) | \phi_{n,k} >
 
-        C_n = \sum_{grid with aug sphere} phi(r) * p_{l,m}(r - R)
+        C_n = \sum_{|r - R| < rmax} phi(r) * p_{l,m}(r - R)
 
     '''
 
@@ -346,11 +346,11 @@ class nonlr(object):
         self.element_idx = [self.elements.index(s) for s in
                             atoms.get_chemical_symbols()]
 
-        self.set_fft_grid(ngrid=ngrid)
+        self.set_grid(ngrid=ngrid)
         self.rphase()
         self.calc_rproj()
 
-    def set_fft_grid(self, ngrid):
+    def set_grid(self, ngrid):
         '''
         Minimum FFT grid size
         '''
