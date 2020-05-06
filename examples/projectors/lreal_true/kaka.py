@@ -22,7 +22,7 @@ wfc = vaspwfc()
 ngrid = [20, 20, 120]
 phi_r = wfc.wfc_r(iband=iband, ikpt=ikpt, ngrid=ngrid, rescale=1.0, norm=False)
 # phi_r /= np.sqrt(np.prod(phi_r.shape))
-p1 = nonlr(poscar, wfc._encut, k=wfc._kvecs[ikpt-1], ngrid=ngrid)
+p1 = nonlr(poscar, wfc._encut, k=wfc._kvecs[ikpt-1], ngrid=None)
 
 ILM = [(i, l, m) for i, it in zip([0, 1, 2], [0, 1, 1])
       for l in p1.pawpp[it].proj_l

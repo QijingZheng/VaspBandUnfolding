@@ -6,6 +6,45 @@ from vasp_constant import *
 from sph_harm import sph_r, sph_c
 
 
+def fftchk1(n):
+    """
+    Check if n can be factorized into products of 2, 3 and 5.
+
+    From VASP fft3dcray.F, FFTCHK1
+    """
+    nmax = np.array(
+        np.log(n) / np.log([2, 3, 5]),
+        dtype=int
+    )
+    ijk = np.mgrid[
+        1:nmax[0]+1,     # n should be even number
+        0:nmax[1]+1,
+        0:nmax[2]+1
+    ].reshape((3, -1)).T
+
+    for i, j, k in ijk:
+        if (2**i * 3**j * 5**k) == n:
+            return True
+    return False
+
+
+def fftchk(ngrid):
+    '''
+    Return the next correct settings for 3d FFT.
+
+    From VASP fft3dcray.F, FFTCHK
+    '''
+
+    ngrid = np.asarray(ngrid, dtype=int)
+    assert ngrid.shape == (3,)
+
+    for ii in range(3):
+        while not fftchk1(ngrid[ii]):
+            ngrid[ii] += 1
+
+    return ngrid
+
+
 def gvectors(cell, encut, kvec, ngrid=None,
              lgam=False, gamma_half='x', force_gamma=False,
              lsoc=False):
@@ -370,7 +409,7 @@ class nonlr(object):
             # In order to compare with VASP Normalcar, the grid size must be exactly
             # the same!
             ################################################################################
-            self._ngrid = np.array(2 * CUTOF + 1, dtype=int) * 2
+            self._ngrid = fftchk(np.array(2 * CUTOF, dtype=int) * 2)
         else:
             self._ngrid = np.array(ngrid, dtype=int)
 
