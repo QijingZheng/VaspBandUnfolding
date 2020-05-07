@@ -12,6 +12,9 @@ def fftchk1(n):
 
     From VASP fft3dcray.F, FFTCHK1
     """
+    if n % 2 == 1:
+        return False
+
     nmax = np.array(
         np.log(n) / np.log([2, 3, 5]),
         dtype=int
