@@ -20,13 +20,13 @@ def fftchk1(n):
         dtype=int
     )
     ijk = np.mgrid[
-        1:nmax[0]+1,     # n should be even number
-        0:nmax[1]+1,
         0:nmax[2]+1
+        0:nmax[1]+1,
+        1:nmax[0]+1,     # n should be even number
     ].reshape((3, -1)).T
 
     for i, j, k in ijk:
-        if (2**i * 3**j * 5**k) == n:
+        if (5**i * 3**j * 2**k) == n:
             return True
     return False
 
