@@ -578,7 +578,7 @@ class vaspwfc(object):
         E_y = np.fft.ifftn(-1j * Gy * V_q, norm='ortho').real
         E_z = np.fft.ifftn(-1j * Gz * V_q, norm='ortho').real
 
-        return rho, V_r, E_x, E_y, E_z
+        return V_r, E_x, E_y, E_z
 
     def readBandCoeff(self, ispin=1, ikpt=1, iband=1, norm=False):
         '''
