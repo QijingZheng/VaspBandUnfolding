@@ -535,11 +535,13 @@ class vaspwfc(object):
                 rho = np.zeros(ngrid, dtype=float)
                 phi_spinor = self.wfc_r(iband=iband, ikpt=ikpt, ispin=ispin,
                                         ngrid=ngrid, norm=norm)
+                # negative charges, hence the minus sign
                 for phi in phi_spinor:
                     rho += -(phi.conj() * phi).real * normFac**2
             else:
                 phi = self.wfc_r(iband=iband, ikpt=ikpt, ispin=ispin,
                                  ngrid=ngrid, norm=norm) * normFac
+                # negative charges, hence the minus sign
                 rho = -(phi.conj() * phi).real
 
         fx = [ii if ii < ngrid[0] // 2 + 1 else ii - ngrid[0]
@@ -560,18 +562,21 @@ class vaspwfc(object):
         # Note that the G=(0,0,0) entry is set to 1.0 instead of 0.
         G2[0, 0, 0] = 1.0
 
-        # permittivity of vacuum
-        eps0 = 8.85418781762039E-12
-        # charge density in reciprocal space
-        rho_q = np.fft.fftn(rho / eps0, norm='ortho')
+        # permittivity of vacuum [F / m]
+        _eps0 = 8.85418781762039E-12
+        # charge of one electron, in unit of Coulomb [1F * 1V]
+        _e = 1.6021766208E-19
+
+        # charge density in reciprocal space, rho in unit of [Coulomb / Angstrom**3]
+        rho_q = np.fft.fftn(1E10 * _e * rho / _eps0, norm='ortho')
         # the electric potential in reciprocal space
         V_q = - rho_q / G2
         # the electric potential in real space in unit of 'Volt'
         V_r = np.fft.ifftn(V_q, norm='ortho').real
         # the electric field in x/y/z in real space in unit of 'Volt / Angstrom'
-        E_x = np.fft.ifftn(-1j * Gx * V_q, norm='ortho').real * 1E-10
-        E_y = np.fft.ifftn(-1j * Gy * V_q, norm='ortho').real * 1E-10
-        E_z = np.fft.ifftn(-1j * Gz * V_q, norm='ortho').real * 1E-10
+        E_x = np.fft.ifftn(-1j * Gx * V_q, norm='ortho').real
+        E_y = np.fft.ifftn(-1j * Gy * V_q, norm='ortho').real
+        E_z = np.fft.ifftn(-1j * Gz * V_q, norm='ortho').real
 
         return rho, V_r, E_x, E_y, E_z
 
