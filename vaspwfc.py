@@ -570,7 +570,7 @@ class vaspwfc(object):
         # charge density in reciprocal space, rho in unit of [Coulomb / Angstrom**3]
         rho_q = np.fft.fftn(1E10 * _e * rho / _eps0, norm='ortho')
         # the electric potential in reciprocal space
-        V_q = - rho_q / G2
+        V_q = -rho_q / (-G2)
         # the electric potential in real space in unit of 'Volt'
         V_r = np.fft.ifftn(V_q, norm='ortho').real
         # the electric field in x/y/z in real space in unit of 'Volt / Angstrom'
