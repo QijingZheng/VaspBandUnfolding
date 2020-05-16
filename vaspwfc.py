@@ -510,15 +510,25 @@ class vaspwfc(object):
 
     def poisson(self, rho=None, iband=1, ikpt=1, ispin=1, ngrid=None, norm=False):
         """
-        Given a charge density "rho", solve the Poisson Equation to find out the
-        corresponding electri potential. When "rho" is None, construct the charge
-        density from a chosen Kohn-Sham state, i.e. rho(r) = phi_n(r).conj() * phi_n(r).
+        Given a charge density "rho", solve the Poisson equation with periodic
+        boundary condition to find out the corresponding electric potential and
+        field.
 
-        In SI units:
+        When "rho" is None, construct the charge density from a chosen Kohn-Sham
+        state, i.e. rho(r) = phi_n(r).conj() * phi_n(r).
+
+        In SI units, the real space Poisson equation:
 
                     \nabla^2 V = - \rho / \varepsilon_0
-
                              E = - \nabla V
+
+        the reciprocal space Poisson equation:
+
+                    G**2 * V_q = - rho_q / \varepsilon_0
+                           E_q = -1j * G * V_q
+
+        Note that the G=(0,0,0) entry is set to 1.0 instead of 0 to avoid
+        divergence.
         """
 
         if rho is not None:
