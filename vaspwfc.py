@@ -529,20 +529,19 @@ class vaspwfc(object):
             ngrid = self._ngrid * 2
             # normalization factor so that
             # \sum_{ijk} | \phi_{ijk} | ^ 2 * volume / Ngrid = 1
-            normFac = np.sqrt(np.prod(ngrid) / self._Omega)
-            # normFac = 1.0
+            normFac = np.prod(ngrid) / self._Omega
             if self._lsoc:
                 rho = np.zeros(ngrid, dtype=float)
                 phi_spinor = self.wfc_r(iband=iband, ikpt=ikpt, ispin=ispin,
                                         ngrid=ngrid, norm=norm)
                 # negative charges, hence the minus sign
                 for phi in phi_spinor:
-                    rho += -(phi.conj() * phi).real * normFac**2
+                    rho += -(phi.conj() * phi).real * normFac
             else:
                 phi = self.wfc_r(iband=iband, ikpt=ikpt, ispin=ispin,
-                                 ngrid=ngrid, norm=norm) * normFac
+                                 ngrid=ngrid, norm=norm)
                 # negative charges, hence the minus sign
-                rho = -(phi.conj() * phi).real
+                rho = -(phi.conj() * phi).real * normFac
 
         fx = [ii if ii < ngrid[0] // 2 + 1 else ii - ngrid[0]
               for ii in range(ngrid[0])]
