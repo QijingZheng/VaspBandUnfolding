@@ -156,7 +156,7 @@ class vaspwfc(object):
         self._wfc.seek(0)
         self._recl, self._nspin, self._rtag = np.array(
             np.fromfile(self._wfc, dtype=np.float, count=3),
-            dtype=int
+            dtype=np.int64
         )
         self._WFPrec = self.setWFPrec()
         # the second record
