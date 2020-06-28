@@ -387,7 +387,7 @@ class vaspwfc(object):
     def wfc_r(self, ispin=1, ikpt=1, iband=1,
               gvec=None, Cg=None, ngrid=None,
               rescale=None,
-              norm=True):
+              norm=True, kr_phase=False):
         '''
         Obtain the pseudo-wavefunction of the specified KS states in real space
         by performing FT transform on the reciprocal space planewave
@@ -403,6 +403,7 @@ class vaspwfc(object):
             Cg    : the plane-wave coefficients. If None, read from WAVECAR
             ngrid : the FFT grid size
             norm  : normalized Cg?
+         kr_phase : Whether or not to multiply the exp(ikr) phase
 
         The return wavefunctions are normalized in a way that
 
@@ -419,6 +420,23 @@ class vaspwfc(object):
             assert np.alltrue(ngrid >= self._ngrid), \
                 "Minium FT grid size: (%d, %d, %d)" % \
                 (self._ngrid[0], self._ngrid[1], self._ngrid[2])
+
+        # By default, the WAVECAR only stores the periodic part of the Bloch
+        # wavefunction. In order to get the full Bloch wavefunction, one need to
+        # multiply the periodic part with the phase: exp(i k r). Below, the
+        # k-point vector and the real-space grid are both in the direct
+        # coordinates.
+        if kr_phase:
+            phase = np.exp(1j * np.pi * 2 *
+                           np.sum(
+                               self._kvecs[ikpt-1] * np.mgrid[
+                                   0:ngrid[0], 0:ngrid[1], 0:ngrid[2]
+                               ].reshape((3, np.prod(ngrid))).T /
+                               ngrid.astype(float),
+                               axis=1
+                           )).reshape(ngrid)
+        else:
+            phase = 1.0
 
         # The default normalization of np.fft.fftn has the direct transforms
         # unscaled and the inverse transforms are scaled by 1/n. It is possible
@@ -459,7 +477,7 @@ class vaspwfc(object):
             # spinor down
             phi_k[:, :, :] = 0.0j
             phi_k[gvec[:, 0], gvec[:, 1], gvec[:, 2]] = dump[nplw:]
-            wfc_spinor.append(ifftn(phi_k) * normFac)
+            wfc_spinor.append(ifftn(phi_k) * normFac * phase)
 
             del dump
             return wfc_spinor
@@ -506,7 +524,7 @@ class vaspwfc(object):
                     return np.swapaxes(tmp, 0, 2)
             else:
                 # perform complex2complex FFT
-                return ifftn(phi_k * normFac)
+                return ifftn(phi_k * normFac) * phase
 
     def poisson(self, rho=None, iband=1, ikpt=1, ispin=1, ngrid=None, norm=False):
         """
