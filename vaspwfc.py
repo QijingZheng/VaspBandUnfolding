@@ -387,7 +387,7 @@ class vaspwfc(object):
     def wfc_r(self, ispin=1, ikpt=1, iband=1,
               gvec=None, Cg=None, ngrid=None,
               rescale=None,
-              norm=True, kr_phase=False):
+              norm=True, kr_phase=False, r0=[0.0, 0.0, 0.0]):
         '''
         Obtain the pseudo-wavefunction of the specified KS states in real space
         by performing FT transform on the reciprocal space planewave
@@ -403,7 +403,8 @@ class vaspwfc(object):
             Cg    : the plane-wave coefficients. If None, read from WAVECAR
             ngrid : the FFT grid size
             norm  : normalized Cg?
-         kr_phase : Whether or not to multiply the exp(ikr) phase
+         kr_phase : whether or not to multiply the exp(ikr) phase
+               r0 : shift of the kr-phase to get full wfc other than primitive cell
 
         The return wavefunctions are normalized in a way that
 
@@ -423,16 +424,22 @@ class vaspwfc(object):
 
         # By default, the WAVECAR only stores the periodic part of the Bloch
         # wavefunction. In order to get the full Bloch wavefunction, one need to
-        # multiply the periodic part with the phase: exp(i k r). Below, the
+        # multiply the periodic part with the phase: exp(i k (r + r0). Below, the
         # k-point vector and the real-space grid are both in the direct
         # coordinates.
         if kr_phase:
             phase = np.exp(1j * np.pi * 2 *
                            np.sum(
-                               self._kvecs[ikpt-1] * np.mgrid[
-                                   0:ngrid[0], 0:ngrid[1], 0:ngrid[2]
-                               ].reshape((3, np.prod(ngrid))).T /
-                               ngrid.astype(float),
+                               self._kvecs[ikpt-1] *
+                               (
+                                   # r
+                                   np.mgrid[
+                                       0:ngrid[0], 0:ngrid[1], 0:ngrid[2]
+                                   ].reshape((3, np.prod(ngrid))).T /
+                                   ngrid.astype(float) +
+                                   # r0
+                                   np.array(r0, dtype=float)
+                               ),
                                axis=1
                            )).reshape(ngrid)
         else:
@@ -473,7 +480,7 @@ class vaspwfc(object):
 
             # spinor up
             phi_k[gvec[:, 0], gvec[:, 1], gvec[:, 2]] = dump[:nplw]
-            wfc_spinor.append(ifftn(phi_k) * normFac)
+            wfc_spinor.append(ifftn(phi_k) * normFac * phase)
             # spinor down
             phi_k[:, :, :] = 0.0j
             phi_k[gvec[:, 0], gvec[:, 1], gvec[:, 2]] = dump[nplw:]
