@@ -379,14 +379,18 @@ class unfold():
         # 3d grid for planewave coefficients
         wfc_k_3D = np.zeros(self.wfc._ngrid, dtype=np.complex)
 
-        if self._lsoc:
-            # the weights and corresponding energies
-            P_Km = np.zeros((2, self.wfc._nbands), dtype=float)
-            E_Km = np.zeros((2, self.wfc._nbands), dtype=float)
-        else:
-            # the weights and corresponding energies
-            P_Km = np.zeros(self.wfc._nbands, dtype=float)
-            E_Km = np.zeros(self.wfc._nbands, dtype=float)
+        # if self._lsoc:
+        #     # the weights and corresponding energies
+        #     P_Km = np.zeros((2, self.wfc._nbands), dtype=float)
+        #     E_Km = np.zeros((2, self.wfc._nbands), dtype=float)
+        # else:
+        #     # the weights and corresponding energies
+        #     P_Km = np.zeros(self.wfc._nbands, dtype=float)
+        #     E_Km = np.zeros(self.wfc._nbands, dtype=float)
+
+        # the weights and corresponding energies
+        P_Km = np.zeros(self.wfc._nbands, dtype=float)
+        E_Km = np.zeros(self.wfc._nbands, dtype=float)
 
         for nb in range(self.wfc._nbands):
             # initialize the array to zero, which is unnecessary since the
@@ -396,19 +400,19 @@ class unfold():
             if self._lsoc:
                 # pad the coefficients to 3D grid
                 band_coeff = self.wfc.readBandCoeff(ispin=whichspin, ikpt=ikpt,
-                                                    iband=nb + 1, norm=False)
-                nplw = band_coeff.shape[0] / 2
+                                                    iband=nb + 1, norm=True)
+                nplw = band_coeff.shape[0] // 2
                 band_spinor_coeff = [band_coeff[:nplw], band_coeff[nplw:]]
 
+                # energy
+                E_Km[nb] = self.bands[whichspin-1,ikpt-1,nb]
                 for Ispinor in range(2):
-                    band = band_spinor_coeff[Ispinor]
-                    band /= np.linalg.norm(band)
-                    wfc_k_3D[GallIndex[:,0], GallIndex[:,1], GallIndex[:,2]] = band
+                    # band = band_spinor_coeff[Ispinor]
+                    # band /= np.linalg.norm(band)
+                    wfc_k_3D[GallIndex[:,0], GallIndex[:,1], GallIndex[:,2]] = band_spinor_coeff[Ispinor]
 
-                    # energy
-                    E_Km[Ispinor, nb] = self.bands[whichspin-1,ikpt-1,nb]
                     # spectral weight 
-                    P_Km[Ispinor, nb] = np.linalg.norm(
+                    P_Km[Ispinor, nb] += np.linalg.norm(
                                 wfc_k_3D[GoffsetIndex[:,0], GoffsetIndex[:,1], GoffsetIndex[:,2]]
                             )**2
             else:
@@ -478,9 +482,11 @@ class unfold():
                        for ik in range(NKPTS)])
 
         self.SW = np.array(sw)
-        if self._lsoc:
-            # self.SW = np.swapaxes(self.SW, 0, 1)
-            self.SW = np.array([self.SW[0,:,:,0,:], self.SW[0,:,:,1,]])
+
+        # For noncollinear calculation, nspin = 1.
+        # if self._lsoc:
+        #     # self.SW = np.swapaxes(self.SW, 0, 1)
+        #     self.SW = np.array([self.SW[0,:,:,0,:], self.SW[0,:,:,1,]])
 
         return self.SW
 
@@ -496,7 +502,9 @@ class unfold():
 
         assert self.SW is not None, 'Spectral weight must be calculated first!'
 
-        NS = 2 if self._lsoc else self.wfc._nspin
+        # NS = 2 if self._lsoc else self.wfc._nspin
+        # For noncollinear calculation, nspin = 1.
+        NS = self.wfc._nspin
         # Number of kpoints
         nk = self.SW.shape[1]
         # spectral function
