@@ -286,36 +286,59 @@ class vaspwfc(object):
 
         # force_Gamma: consider gamma-only case regardless of the real setting
         lgam = True if force_Gamma else self._lgam
+
+        # if lgam:
+        #     # parallel gamma version of VASP WAVECAR exclude some planewave
+        #     # components, -DwNGZHalf
+        #     if self._gam_half == 'z':
+        #         kgrid = np.array([(fx[ii], fy[jj], fz[kk])
+        #                           for kk in range(self._ngrid[2])
+        #                           for jj in range(self._ngrid[1])
+        #                           for ii in range(self._ngrid[0])
+        #                           if (
+        #                               (fz[kk] > 0) or
+        #                               (fz[kk] == 0 and fy[jj] > 0) or
+        #                               (fz[kk] == 0 and fy[jj]
+        #                                == 0 and fx[ii] >= 0)
+        #         )], dtype=float)
+        #     else:
+        #         kgrid = np.array([(fx[ii], fy[jj], fz[kk])
+        #                           for kk in range(self._ngrid[2])
+        #                           for jj in range(self._ngrid[1])
+        #                           for ii in range(self._ngrid[0])
+        #                           if (
+        #                               (fx[ii] > 0) or
+        #                               (fx[ii] == 0 and fy[jj] > 0) or
+        #                               (fx[ii] == 0 and fy[jj]
+        #                                == 0 and fz[kk] >= 0)
+        #         )], dtype=float)
+        # else:
+        #     kgrid = np.array([(fx[ii], fy[jj], fz[kk])
+        #                       for kk in range(self._ngrid[2])
+        #                       for jj in range(self._ngrid[1])
+        #                       for ii in range(self._ngrid[0])], dtype=float)
+
+        ############################################################
+        # 10x faster
+        ############################################################
+        # In meshgrid, fx run the fastest, fz the slowest
+        gz, gy, gx = np.array(
+            np.meshgrid(fz, fy, fx, indexing='ij')
+        ).reshape((3, -1))
+        kgrid = np.array([gx, gy, gz], dtype=float).T
         if lgam:
-            # parallel gamma version of VASP WAVECAR exclude some planewave
-            # components, -DwNGZHalf
             if self._gam_half == 'z':
-                kgrid = np.array([(fx[ii], fy[jj], fz[kk])
-                                  for kk in range(self._ngrid[2])
-                                  for jj in range(self._ngrid[1])
-                                  for ii in range(self._ngrid[0])
-                                  if (
-                                      (fz[kk] > 0) or
-                                      (fz[kk] == 0 and fy[jj] > 0) or
-                                      (fz[kk] == 0 and fy[jj]
-                                       == 0 and fx[ii] >= 0)
-                )], dtype=float)
+                kgrid = kgrid[
+                    (gz > 0) |
+                    ((gz == 0) & (gy > 0)) |
+                    ((gz == 0) & (gy == 0) & (gx >= 0))
+                ]
             else:
-                kgrid = np.array([(fx[ii], fy[jj], fz[kk])
-                                  for kk in range(self._ngrid[2])
-                                  for jj in range(self._ngrid[1])
-                                  for ii in range(self._ngrid[0])
-                                  if (
-                                      (fx[ii] > 0) or
-                                      (fx[ii] == 0 and fy[jj] > 0) or
-                                      (fx[ii] == 0 and fy[jj]
-                                       == 0 and fz[kk] >= 0)
-                )], dtype=float)
-        else:
-            kgrid = np.array([(fx[ii], fy[jj], fz[kk])
-                              for kk in range(self._ngrid[2])
-                              for jj in range(self._ngrid[1])
-                              for ii in range(self._ngrid[0])], dtype=float)
+                kgrid = kgrid[
+                    (gx > 0) |
+                    ((gx == 0) & (gy > 0)) |
+                    ((gx == 0) & (gy == 0) & (gz >= 0))
+                ]
 
         # Kinetic_Energy = (G + k)**2 / 2
         # HSQDTM    =  hbar**2/(2*ELECTRON MASS)
