@@ -87,7 +87,7 @@ class vaspwfc(object):
     '''
 
     def __init__(self, fnm='WAVECAR', lsorbit=False, lgamma=False,
-                 gamma_half='z', omp_num_threads=1):
+                 gamma_half='x', omp_num_threads=1):
         '''
         Initialization.
         '''
