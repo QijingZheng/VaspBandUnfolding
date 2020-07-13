@@ -283,20 +283,30 @@ class vaspwfc(object):
         ############################################################
         # Gamma version -50% memory usage and 1x speed.
         ############################################################
-        fx = [ii if ii < self._ngrid[0] // 2 + 1 else ii - self._ngrid[0]
-              for ii in range(
-                  self._ngrid[0] // 2 + 1
-                  if (lgam and (self._gam_half == 'x'))
-                  else
-                  self._ngrid[0])]
-        fy = [jj if jj < self._ngrid[1] // 2 + 1 else jj - self._ngrid[1]
-              for jj in range(self._ngrid[1])]
-        fz = [kk if kk < self._ngrid[2] // 2 + 1 else kk - self._ngrid[2]
-              for kk in range(
-                  self._ngrid[2] // 2 + 1
-                  if (lgam and (self._gam_half == 'z'))
-                  else
-                  self._ngrid[2])]
+        # fx = [ii if ii < self._ngrid[0] // 2 + 1 else ii - self._ngrid[0]
+        #       for ii in range(
+        #           self._ngrid[0] // 2 + 1
+        #           if (lgam and (self._gam_half == 'x'))
+        #           else
+        #           self._ngrid[0])]
+        # fy = [jj if jj < self._ngrid[1] // 2 + 1 else jj - self._ngrid[1]
+        #       for jj in range(self._ngrid[1])]
+        # fz = [kk if kk < self._ngrid[2] // 2 + 1 else kk - self._ngrid[2]
+        #       for kk in range(
+        #           self._ngrid[2] // 2 + 1
+        #           if (lgam and (self._gam_half == 'z'))
+        #           else
+        #           self._ngrid[2])]
+
+        fx, fy, fz = [np.arange(n, dtype=int) for n in self._ngrid]
+        fx[self._ngrid[0] // 2 + 1:] -= self._ngrid[0]
+        fy[self._ngrid[1] // 2 + 1:] -= self._ngrid[1]
+        fz[self._ngrid[2] // 2 + 1:] -= self._ngrid[2]
+        if lgam:
+            if self._gam_half == 'x':
+                fx = fx[:self._ngrid[0] // 2 + 1]
+            else:
+                fz = fz[:self._ngrid[2] // 2 + 1]
 
         # if lgam:
         #     # parallel gamma version of VASP WAVECAR exclude some planewave
