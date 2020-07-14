@@ -20,7 +20,7 @@ def fftchk1(n):
         dtype=int
     )
     ijk = np.mgrid[
-        0:nmax[2]+1
+        0:nmax[2]+1,
         0:nmax[1]+1,
         1:nmax[0]+1,     # n should be even number
     ].reshape((3, -1)).T
@@ -65,46 +65,37 @@ def gvectors(cell, encut, kvec, ngrid=None,
         ngrid = np.array(2 * CUTOF + 1, dtype=int)
 
     kvec = np.asarray(kvec)
-    # fx, fy, fz = [fftfreq(n) * n for n in self._ngrid]
-    # fftfreq in scipy.fftpack is a little different with VASP frequencies
-    fx = [ii if ii < ngrid[0] // 2 + 1 else ii - ngrid[0]
-          for ii in range(ngrid[0])]
-    fy = [jj if jj < ngrid[1] // 2 + 1 else jj - ngrid[1]
-          for jj in range(ngrid[1])]
-    fz = [kk if kk < ngrid[2] // 2 + 1 else kk - ngrid[2]
-          for kk in range(ngrid[2])]
 
-    # force_Gamma: consider gamma-only case regardless of the real setting
-    if force_gamma:
-        lgam = True
+    # force_Gamma: consider gamma-only case regardless of the actual setting
+    if force_gamma: lgam = True
+
+    fx, fy, fz = [np.arange(n, dtype=int) for n in ngrid]
+    fx[ngrid[0] // 2 + 1:] -= ngrid[0]
+    fy[ngrid[1] // 2 + 1:] -= ngrid[1]
+    fz[ngrid[2] // 2 + 1:] -= ngrid[2]
     if lgam:
-        # parallel gamma version of VASP WAVECAR exclude some planewave
-        # components, -DwNGZHalf
-        if gamma_half == 'z':
-            kgrid = np.array([(fx[ii], fy[jj], fz[kk])
-                              for kk in range(ngrid[2])
-                              for jj in range(ngrid[1])
-                              for ii in range(ngrid[0])
-                              if (
-                                  (fz[kk] > 0) or
-                                  (fz[kk] == 0 and fy[jj] > 0) or
-                                  (fz[kk] == 0 and fy[jj] == 0 and fx[ii] >= 0)
-            )], dtype=float)
+        if gam_half == 'x':
+            fx = fx[:ngrid[0] // 2 + 1]
         else:
-            kgrid = np.array([(fx[ii], fy[jj], fz[kk])
-                              for kk in range(ngrid[2])
-                              for jj in range(ngrid[1])
-                              for ii in range(ngrid[0])
-                              if (
-                                  (fx[ii] > 0) or
-                                  (fx[ii] == 0 and fy[jj] > 0) or
-                                  (fx[ii] == 0 and fy[jj] == 0 and fz[kk] >= 0)
-            )], dtype=float)
-    else:
-        kgrid = np.array([(fx[ii], fy[jj], fz[kk])
-                          for kk in range(ngrid[2])
-                          for jj in range(ngrid[1])
-                          for ii in range(ngrid[0])], dtype=float)
+            fz = fz[:ngrid[2] // 2 + 1]
+
+    gz, gy, gx = np.array(
+        np.meshgrid(fz, fy, fx, indexing='ij')
+    ).reshape((3, -1))
+    kgrid = np.array([gx, gy, gz], dtype=float).T
+    if lgam:
+        if gamma_half == 'z':
+            kgrid = kgrid[
+                (gz > 0) |
+                ((gz == 0) & (gy > 0)) |
+                ((gz == 0) & (gy == 0) & (gx >= 0))
+            ]
+        else:
+            kgrid = kgrid[
+                (gx > 0) |
+                ((gx == 0) & (gy > 0)) |
+                ((gx == 0) & (gy == 0) & (gz >= 0))
+            ]
 
     # Kinetic_Energy = (G + k)**2 / 2
     # HSQDTM    =  hbar**2/(2*ELECTRON MASS)

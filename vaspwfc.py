@@ -275,7 +275,7 @@ class vaspwfc(object):
         assert 1 <= ikpt <= self._nkpts,  'Invalid kpoint index!'
 
         kvec = self._kvecs[ikpt-1]
-        # force_Gamma: consider gamma-only case regardless of the real setting
+        # force_Gamma: consider gamma-only case regardless of the actual setting
         lgam = True if force_Gamma else self._lgam
 
         # fx, fy, fz = [fftfreq(n) * n for n in self._ngrid]
