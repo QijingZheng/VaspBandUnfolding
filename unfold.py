@@ -412,7 +412,7 @@ class unfold():
                     wfc_k_3D[GallIndex[:,0], GallIndex[:,1], GallIndex[:,2]] = band_spinor_coeff[Ispinor]
 
                     # spectral weight 
-                    P_Km[Ispinor, nb] += np.linalg.norm(
+                    P_Km[nb] += np.linalg.norm(
                                 wfc_k_3D[GoffsetIndex[:,0], GoffsetIndex[:,1], GoffsetIndex[:,2]]
                             )**2
             else:
