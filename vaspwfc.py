@@ -372,15 +372,50 @@ class vaspwfc(object):
         # Check if the calculated number of planewaves and the one recorded in the
         # WAVECAR are equal
         if check_consistency:
-            if self._lsoc:
-                assert Gvec.shape[0] == self._nplws[ikpt - 1] // 2, \
-                    'No. of planewaves not consistent for an SOC WAVECAR! %d %d %d' % \
-                    (Gvec.shape[0], self._nplws[ikpt - 1],
-                     np.prod(self._ngrid))
-            else:
-                assert Gvec.shape[0] == self._nplws[ikpt - 1], 'No. of planewaves not consistent! %d %d %d' % \
-                    (Gvec.shape[0], self._nplws[ikpt - 1],
-                     np.prod(self._ngrid))
+            # if self._lsoc:
+            #     assert Gvec.shape[0] == self._nplws[ikpt - 1] // 2, \
+            #         'No. of planewaves not consistent for an SOC WAVECAR! %d %d %d' % \
+            #         (Gvec.shape[0], self._nplws[ikpt - 1],
+            #          np.prod(self._ngrid))
+            # else:
+            #     assert Gvec.shape[0] == self._nplws[ikpt - 1], 'No. of planewaves not consistent! %d %d %d' % \
+            #         (Gvec.shape[0], self._nplws[ikpt - 1],
+            #          np.prod(self._ngrid))
+
+            if Gvec.shape[0] != self._nplws[ikpt - 1]:
+                if Gvec.shape[0] * 2 == self._nplws[ikpt - 1]:
+                    if not self._lsoc:
+                        raise ValueError('''
+                        It seems that you are reading a WAVECAR from a NONCOLLINEAR VASP.
+                        Please set 'lsorbit = True' when loading the WAVECAR.
+                        For example:
+
+                            wfc = vaspwfc('WAVECAR', lsorbit=True)
+                        ''')
+                elif Gvec.shape[0] == 2 * self._nplws[ikpt - 1] - 1:
+                    if not self._lgam:
+                        raise ValueError('''
+                        It seems that you are reading a WAVECAR from a GAMMA-ONLY VASP.
+                        Please set 'lgamma = True' when loading the WAVECAR.  Moreover, you
+                        may want to set 'gamma_half = "z"' if you are using VASP version <=
+                        5.2. For example:
+
+                            # For VASP <= 5.2
+                            wfc = vaspwfc('WAVECAR', lgamma=True, gamma_half='z')
+                            # "gamma_half" default to "x" for VASP > 5.2
+                            wfc = vaspwfc('WAVECAR', lgamma=True, gamma_half='x')
+                        ''')
+                else:
+                    raise ValueError('''
+                    NO. OF PLANEWAVES NOT CONSISTENT:
+
+                        THIS CODE -> %d
+                        FROM VASP -> %d
+                           NGRIDS -> %d
+                    ''' % (Gvec.shape[0],
+                           self._nplws[ikpt - 1] // 2 if self._lsoc else self._nplws[ikpt - 1],
+                           np.prod(self._ngrid))
+                    )
 
         return np.asarray(Gvec, dtype=int)
 
