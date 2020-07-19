@@ -291,10 +291,12 @@ class pawpotcar(object):
 
         for ii in range(self.lmax):
             axes[0].plot(
-                self.proj_rgrid, self.rprojs[ii], label=f"L = {self.proj_l[ii]}",
+                # self.proj_rgrid, self.rprojs[ii], label=f"L = {self.proj_l[ii]}"
+                self.proj_rgrid, self.rprojs[ii], label="L = {}".format(self.proj_l[ii])
             )
             l1, = axes[1].plot(
-                self.core_rgrid, self.core_ae_wfc[ii], label=f"L = {self.proj_l[ii]}"
+                # self.core_rgrid, self.core_ae_wfc[ii], label=f"L = {self.proj_l[ii]}"
+                self.core_rgrid, self.core_ae_wfc[ii], label="L = {}".format(self.proj_l[ii])
             )
             axes[1].plot(
                 self.core_rgrid, self.core_ps_wfc[ii], ls=':',
