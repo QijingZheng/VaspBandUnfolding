@@ -79,7 +79,7 @@ def parse_cml_args(cml):
 
     arg.add_argument('--figsize', dest='figsize',
                      action='store', type=float,
-                     nargs=2, default=(4.0, 2.4),
+                     nargs=2, default=(4.8, 3.0),
                      help='number of point in DOS plot')
 
     return arg.parse_args(cml)
@@ -151,7 +151,7 @@ def showtdm(tdm, p):
     emin = dE.min()
     emax = dE.max()
     eran = emax - emin
-    e0 = np.linspace(emin - 0.05 * eran, emax + 0.05 * eran, p.nedos)
+    e0 = np.linspace(emin - 0.10 * eran, emax + 0.10 * eran, p.nedos)
     tdm_abs = np.abs(tdm[-3:]).T
 
     SMEAR = 1. / (np.sqrt(2 * np.pi) * p.sigma) * \
@@ -167,18 +167,26 @@ def showtdm(tdm, p):
     import matplotlib.pyplot as plt
     plt.style.use('ggplot')
 
-    fig, ax = plt.subplots()
-    fig.set_size_inches(p.figsize)
+    fig = plt.figure(
+        figsize=p.figsize, dpi=300
+    )
+    ax = plt.subplot()
 
-    ax.plot(e0, Tx, color='r', label='x')
-    ax.plot(e0, Ty, color='g', label='y')
-    ax.plot(e0, Tz, color='b', label='z')
-    ax.plot(e0, Tt, color='k', label='tot')
+    ax.plot(e0, Tx, color='r', lw=0.8, ls=':', label='x', alpha=0.8)
+    ax.plot(e0, Ty, color='g', lw=0.8, ls=':', label='y', alpha=0.8)
+    ax.plot(e0, Tz, color='b', lw=0.8, ls=':', label='z', alpha=0.8)
+    ax.plot(e0, Tt, color='k', lw=0.8, ls='-', label='tot', alpha=0.8)
+
+    tdm_abs_tot = np.sum(tdm_abs, axis=1)
+    fac = Tt.max() * 0.20 / tdm_abs_tot.max()
+    ax.vlines(dE, ymin=0.0, ymax=tdm_abs_tot * fac, lw=1.0, color='k')
 
     ax.set_xlabel('Energy [eV]', labelpad=5)
+    ax.set_ylabel('Transition Dipole Moment', labelpad=5)
     plt.legend(loc='best')
 
     plt.tight_layout()
+    plt.savefig('tdm.png', dpi=300)
     plt.show()
 
 
@@ -193,7 +201,11 @@ def main(cml):
 
     tdm = vasptdm(wfc, ibands, jbands, ikpt=p.ikpt, ispin=p.ispin)
 
-    # np.savetxt('TDM.dat', tdm[:,-4])
+    header = ('{:5s} {:5s}' + ' {:>8s}' * 6).format(
+        "iband", "jband", "E_i", "E_j", "dE", "Tx", "Ty", "Tz")
+    np.savetxt('TDM.dat', np.abs(tdm).T,
+               header=header,
+               fmt='  %5d %5d' + ' %8.4f' * 6)
     showtdm(tdm[-4:], p)
 
 
