@@ -1,0 +1,202 @@
+#!/usr/bin/env python
+
+import numpy as np
+import re
+import sys
+import argparse
+from vaspwfc import vaspwfc
+from vasp_constant import *
+
+
+def parse_band_idx(band_str_lst):
+    '''
+    Generate the band indices.
+    '''
+    ibands = []
+    for bstr in band_str_lst:
+        m = re.match(r'(\d+)(?::(\d+))?(?::(\d+))?$', bstr)
+        if not m:
+            raise ValueError(
+                "\nThe band index should be assigned with the combination of the following ways:\n\n"
+                "-> 10, a single band with index 20\n"
+                "-> 20:30, a continuous range from 1 to 10, 10 included\n"
+                "-> 30:50:2, a continuous range from 30 to 50, with step size 2\n"
+                "\nFor example, '1 4:6 8:16:2' will convert to '1 4 5 6 8 10 12 14 16'."
+            )
+        ii = m.group(1)
+        jj = m.group(2) or ii
+        ss = m.group(3) or 1
+        ibands += [x for x in range(int(ii), int(jj)+1, int(ss))]
+
+    return np.array(ibands, dtype=int)
+
+
+def parse_cml_args(cml):
+    '''
+    CML parser.
+    '''
+    arg = argparse.ArgumentParser(add_help=True)
+
+    arg.add_argument('-w', '--wavecar', dest='wavecar', action='store', type=str,
+                     default='WAVECAR',
+                     help='Location of the WAVECAR')
+
+    arg.add_argument('-s', dest='ispin', action='store', type=int,
+                     default=1,
+                     help='the spin index, starting from 1')
+
+    arg.add_argument('-k', dest='ikpt', action='store', type=int,
+                     default=1,
+                     help='the k-point index, starting from 1')
+
+    arg.add_argument('-i', '--ibands', dest='ibands', action='store', type=str,
+                     nargs='+',
+                     help='the initial band indices, e.g. 1:10 15 20:30:2')
+
+    arg.add_argument("-j", '--jbands', dest='jbands', action='store', type=str,
+                     nargs='+',
+                     help='the final band indices, e.g. 1:10 15 20:30:2')
+
+    arg.add_argument('--lgamma', dest='lgamma', action='store_true',
+                     help='WAVECAR from GAMMA-ONLY VASP')
+
+    arg.add_argument('--gamma_half', dest='gamma_half', action='store',
+                     type=str, default='x', choices=['x', 'z'],
+                     help='GAMMA half in x/z direction')
+
+    arg.add_argument('--lsorbit', dest='lsorbit', action='store_true',
+                     help='WAVECAR from NONCOLLINEAR VASP')
+
+    arg.add_argument('--sigma', dest='sigma',
+                     action='store', type=float,
+                     default=0.05,
+                     help='smearing parameter, default 0.05')
+
+    arg.add_argument('--nedos', dest='nedos',
+                     action='store', type=int,
+                     default=5000,
+                     help='number of point in DOS plot')
+
+    arg.add_argument('--figsize', dest='figsize',
+                     action='store', type=float,
+                     nargs=2, default=(4.0, 2.4),
+                     help='number of point in DOS plot')
+
+    return arg.parse_args(cml)
+
+
+def vasptdm(wfc, ibands, jbands, ispin=1, ikpt=1):
+    '''
+    '''
+
+    ibands = np.asarray(ibands, dtype=int)
+    jbands = np.asarray(jbands, dtype=int)
+    assert jbands.min() > ibands.max()
+    nx, ny = np.meshgrid(ibands, jbands, indexing='ij')
+
+    E_i = wfc._bands[ispin-1, ikpt-1, ibands-1]
+    E_j = wfc._bands[ispin-1, ikpt-1, jbands-1]
+    Ex, Ey = np.meshgrid(E_i, E_j, indexing='ij')
+    dE = Ey - Ex
+
+    gvec = np.dot(wfc.gvectors(ikpt=ikpt), wfc._Bcell*TPI)
+    Cg_i = np.array([
+        wfc.readBandCoeff(ispin=ispin, ikpt=ikpt, iband=ii)
+        for ii in ibands
+    ])
+    Cg_j = np.array([
+        wfc.readBandCoeff(ispin=ispin, ikpt=ikpt, iband=jj)
+        for jj in jbands
+    ])
+
+    if wfc._lsoc:
+        TDM = np.array([
+            np.dot(Cg_i[:, :nplw] * gvec[:, ii], Cg_j[:, :nplw].T.conj()) +
+            np.dot(Cg_i[:, nplw:] * gvec[:, ii], Cg_j[:, nplw:].T.conj())
+            for ii in range(3)
+        ])
+    elif wfc._lgam:
+        TDM = np.array([
+            (
+                np.dot(Cg_i * gvec[:, ii], Cg_j.T.conj()) -
+                np.dot(Cg_i.conj() * gvec[:, ii], Cg_j.T)
+            ) / 2.
+            for ii in range(3)
+        ])
+    else:
+        TDM = np.array([
+            np.dot(Cg_i * gvec[:, ii], Cg_j.T.conj())
+            for ii in range(3)
+        ])
+
+    TDM = 1j / (dE / (2*RYTOEV)) * TDM * AUTOA * AUTDEBYE
+    # dump = np.vstack([
+    #     nx, ny, Ex, Ey, dE, TDM[0], TDM[1], TDM[2]
+    # ]).reshape((8, -1)).T
+    dump = [
+        nx.flatten(), ny.flatten(),
+        Ex.flatten(), Ey.flatten(), dE.flatten(),
+        TDM[0].flatten(),
+        TDM[1].flatten(),
+        TDM[2].flatten()
+    ]
+
+    return dump
+
+
+def showtdm(tdm, p):
+    '''
+    '''
+    dE = tdm[0]
+    emin = dE.min()
+    emax = dE.max()
+    eran = emax - emin
+    e0 = np.linspace(emin - 0.05 * eran, emax + 0.05 * eran, p.nedos)
+    tdm_abs = np.abs(tdm[-3:]).T
+
+    SMEAR = 1. / (np.sqrt(2 * np.pi) * p.sigma) * \
+        np.exp(
+        -(dE[None, :] - e0[:, None])**2 / p.sigma**2
+    )
+    Tx = np.sum(tdm_abs[:, 0] * SMEAR, axis=1)
+    Ty = np.sum(tdm_abs[:, 1] * SMEAR, axis=1)
+    Tz = np.sum(tdm_abs[:, 2] * SMEAR, axis=1)
+    Tt = Tx + Ty + Tz
+
+    import matplotlib as mpl
+    import matplotlib.pyplot as plt
+    plt.style.use('ggplot')
+
+    fig, ax = plt.subplots()
+    fig.set_size_inches(p.figsize)
+
+    ax.plot(e0, Tx, color='r', label='x')
+    ax.plot(e0, Ty, color='g', label='y')
+    ax.plot(e0, Tz, color='b', label='z')
+    ax.plot(e0, Tt, color='k', label='tot')
+
+    ax.set_xlabel('Energy [eV]', labelpad=5)
+    plt.legend(loc='best')
+
+    plt.tight_layout()
+    plt.show()
+
+
+def main(cml):
+    p = parse_cml_args(cml)
+
+    wfc = vaspwfc(p.wavecar,
+                  lsorbit=p.lsorbit, lgamma=p.lgamma,
+                  gamma_half=p.gamma_half)
+    ibands = parse_band_idx(p.ibands)
+    jbands = parse_band_idx(p.jbands)
+
+    tdm = vasptdm(wfc, ibands, jbands, ikpt=p.ikpt, ispin=p.ispin)
+
+    # np.savetxt('TDM.dat', tdm[:,-4])
+    showtdm(tdm[-4:], p)
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
+    pass
