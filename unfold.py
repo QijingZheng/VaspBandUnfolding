@@ -250,7 +250,7 @@ class unfold():
     '''
 
     def __init__(self, M=None, wavecar='WAVECAR', gamma=False, lsorbit=False,
-                 gamma_half='z'):
+                 gamma_half='x'):
         '''
         Initialization.
 
@@ -345,6 +345,17 @@ class unfold():
             raise ValueError(
                     'Cannot find the corresponding K-points in WAVECAR!' 
                     )
+
+    def k2K_map(self, kpath):
+        '''
+        Find the map from primitive-cell k-points to supercell k-points.
+        '''
+
+        return [
+            self.find_K_index(
+                find_K_from_k(k, self.M)[0]
+            ) - 1 for k in kpath
+        ]
 
     def spectral_weight_k(self, k0, whichspin=1):
         '''
