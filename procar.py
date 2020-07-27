@@ -7,12 +7,15 @@ from ase.io import read
 from collections import Iterable
 
 ############################################################
+
+
 def gaussian_smearing_org(x, x0, sigma=0.05):
     '''
     Gaussian smearing of a Delta function.
     '''
 
     return 1. / (np.sqrt(2*np.pi) * sigma) * np.exp(-(x - x0)**2 / (2*sigma**2))
+
 
 def string2index(string):
     if ':' not in string:
@@ -25,6 +28,7 @@ def string2index(string):
             i.append(int(s))
     i += (3 - len(i)) * [None]
     return slice(*i)
+
 
 def gradient_fill(x, y, fill_color=None, ax=None, direction=1, **kwargs):
     """
@@ -62,11 +66,11 @@ def gradient_fill(x, y, fill_color=None, ax=None, direction=1, **kwargs):
 
     z = np.empty((100, 1, 4), dtype=float)
     rgb = mcolors.colorConverter.to_rgb(fill_color)
-    z[:,:,:3] = rgb
+    z[:, :, :3] = rgb
     if direction == 1:
-        z[:,:,-1] = np.linspace(0, alpha, 100)[:,None]
+        z[:, :, -1] = np.linspace(0, alpha, 100)[:, None]
     else:
-        z[:,:,-1] = np.linspace(alpha, 0, 100)[:,None]
+        z[:, :, -1] = np.linspace(alpha, 0, 100)[:, None]
 
     xmin, xmax, ymin, ymax = x.min(), x.max(), y.min(), y.max()
     im = ax.imshow(z, aspect='auto', extent=[xmin, xmax, ymin, ymax],
@@ -77,7 +81,8 @@ def gradient_fill(x, y, fill_color=None, ax=None, direction=1, **kwargs):
         xy = np.vstack([[xmin, ymin], xy, [xmax, ymin], [xmin, ymin]])
     else:
         xy = np.vstack([[xmin, ymax], xy, [xmax, ymax], [xmin, ymax]])
-    clip_path = Polygon(xy, lw=0.0, facecolor='none', edgecolor='none', closed=True)
+    clip_path = Polygon(xy, lw=0.0, facecolor='none',
+                        edgecolor='none', closed=True)
     ax.add_patch(clip_path)
     im.set_clip_path(clip_path)
 
@@ -86,22 +91,25 @@ def gradient_fill(x, y, fill_color=None, ax=None, direction=1, **kwargs):
     return line, im
 
 ############################################################
+
+
 class procar(object):
     '''
     A class for dealing with VASP PROCAR file.
     '''
+
     def __init__(self, inf='PROCAR', lsoc=False):
         '''
         Initialization
         '''
 
-        self._fname  = inf
+        self._fname = inf
         # the directory containing the input file
-        self._dname  = os.path.dirname(inf)
+        self._dname = os.path.dirname(inf)
         if self._dname == '':
             self._dname = '.'
 
-        self._lsoc   = lsoc
+        self._lsoc = lsoc
 
         try:
             self._procar = open(self._fname, 'r')
@@ -111,21 +119,21 @@ class procar(object):
         self.readProcar()
 
         # parameters usefull for dos generation
-        self._sigma  = 0.05
-        self._nedos  = 3000
+        self._sigma = 0.05
+        self._nedos = 3000
         # Total DOS for each KS energy, with shape (NSPIN, NKPTS, NBANDS, NEDOS)
-        self._tdos   = None
+        self._tdos = None
         # Total DOS with shape (NSPIN, NEDOS)
         self._totalDOS = None
 
         self._spd_index = {
-            's' : 0,
-            'py' : 1, 'pz' : 2, 'px' : 3,
-            'dxy' : 4, 'dyz' : 5, 'dz2' : 6, 'dxz' : 7, 'dx2' : 8
+            's': 0,
+            'py': 1, 'pz': 2, 'px': 3,
+            'dxy': 4, 'dyz': 5, 'dz2': 6, 'dxz': 7, 'dx2': 8
         }
 
         # the basis vectors of the cell
-        self._cell  = None
+        self._cell = None
         self._kpath = None
 
     def readProcar(self):
@@ -138,16 +146,19 @@ class procar(object):
         # when the band number is too large, there will be no space between ";" and
         # the actual band number. A bug found by Homlee Guo.
         # Here, #kpts, #bands and #ions are all integers
-        self._nkpts, self._nbands, self._nions = [int(xx) for xx in re.sub('[^0-9]', ' ', inp[1]).split()]
+        self._nkpts, self._nbands, self._nions = [
+            int(xx) for xx in re.sub('[^0-9]', ' ', inp[1]).split()]
 
         # band projectron on each atoms or s/p/d orbitals
         self._aproj = np.asarray([line.split()[1:-1] for line in inp
                                   if not re.search('[a-zA-Z]', line)],
-                                  dtype=float)
+                                 dtype=float)
         # k-points weights of each k-points
-        self._kptw = np.asarray([line.split()[-1] for line in inp if 'weight' in line], dtype=float)
+        self._kptw = np.asarray([line.split()[-1]
+                                 for line in inp if 'weight' in line], dtype=float)
         # k-points vectors of each k-points
-        self._kptv = np.asarray([line.split()[-6:-3] for line in inp if 'weight' in line], dtype=float)
+        self._kptv = np.asarray([line.split()[-6:-3]
+                                 for line in inp if 'weight' in line], dtype=float)
         # in case of spin poliarized calculation
         self._kptv = self._kptv[:self._nkpts]
         # band energies
@@ -155,18 +166,21 @@ class procar(object):
                                   if 'occ.' in line], dtype=float)
 
         self._nlmax = self._aproj.shape[-1]
-        self._nspin = self._aproj.shape[0] // (self._nkpts * self._nbands * self._nions)
+        self._nspin = self._aproj.shape[0] // (
+            self._nkpts * self._nbands * self._nions)
         self._nspin //= 4 if self._lsoc else 1
 
         if self._lsoc:
-            self._aproj.resize(self._nspin, self._nkpts, self._nbands, 4, self._nions, self._nlmax)
-            self._Mxyz = self._aproj[:,:,:,1:,:,:]
-            self._aproj = self._aproj[:,:,:,0,:,:]
+            self._aproj.resize(self._nspin, self._nkpts,
+                               self._nbands, 4, self._nions, self._nlmax)
+            self._Mxyz = self._aproj[:, :, :, 1:, :, :]
+            self._aproj = self._aproj[:, :, :, 0, :, :]
         else:
-            self._aproj.resize(self._nspin, self._nkpts, self._nbands, self._nions, self._nlmax)
+            self._aproj.resize(self._nspin, self._nkpts,
+                               self._nbands, self._nions, self._nlmax)
 
-        self._kptw.shape  = (self._nspin, self._nkpts)
-        self._kptw_org    = self._kptw.copy()
+        self._kptw.shape = (self._nspin, self._nkpts)
+        self._kptw_org = self._kptw.copy()
         self._eband.shape = (self._nspin, self._nkpts, self._nbands)
 
         # close the PROCAR
@@ -215,12 +229,14 @@ class procar(object):
             if self._cell is None:
                 if cell is None:
                     try:
-                        self._cell = read(self._dname + '/POSCAR', format='vasp').cell.copy()
+                        self._cell = read(
+                            self._dname + '/POSCAR', format='vasp').cell.copy()
                     except:
-                        raise ValueError('Error in reading cell info from POSCAR!')
+                        raise ValueError(
+                            'Error in reading cell info from POSCAR!')
                 else:
                     self._cell = np.array(cell, dtype=float)
-                    assert self._cell.shape == (3,3)
+                    assert self._cell.shape == (3, 3)
 
             if nkseg is None:
                 if os.path.isfile(self._dname + "/KPOINTS"):
@@ -228,11 +244,12 @@ class procar(object):
                     if kfile[2][0].upper() == 'L':
                         nkseg = int(kfile[1].split()[0])
                     else:
-                        raise ValueError('Error reading number of k-points from KPOINTS')
+                        raise ValueError(
+                            'Error reading number of k-points from KPOINTS')
 
             assert isinstance(nkseg, int) and nkseg > 0
 
-            nsec  = self._nkpts // nkseg
+            nsec = self._nkpts // nkseg
             icell = np.linalg.inv(self._cell).T
 
             # vkpts_d = np.diff(self._kptv, axis=0)
@@ -243,7 +260,7 @@ class procar(object):
             for ii in range(nsec):
                 ki = ii * nkseg
                 kj = (ii + 1) * nkseg
-                v[ki:kj,:] -= v[ki]
+                v[ki:kj, :] -= v[ki]
 
             self._kpath = np.linalg.norm(np.dot(v, icell), axis=1)
             for ii in range(1, nsec):
@@ -251,7 +268,8 @@ class procar(object):
                 kj = (ii + 1) * nkseg
                 self._kpath[ki:kj] += self._kpath[ki - 1]
 
-            self._kbound =  np.concatenate((self._kpath[0::nkseg], [self._kpath[-1],]))
+            self._kbound = np.concatenate(
+                (self._kpath[0::nkseg], [self._kpath[-1], ]))
 
         return self._kpath, self._kbound
 
@@ -263,6 +281,7 @@ class procar(object):
         return dos brodening parameter
         '''
         return self._sigma
+
     def set_sigma(self, sigma):
         '''
         set dos brodening parameter
@@ -275,6 +294,7 @@ class procar(object):
                 self.init_dos()
 
     def get_nedos(self): return self._nedos
+
     def set_nedos(self, nedos):
         '''
         set number of point in smooth DOS
@@ -292,6 +312,7 @@ class procar(object):
         return the k-points weights
         '''
         return self._kptw.copy()
+
     def set_kpts_weight(self, kptw):
         '''
         set the k-points weights
@@ -303,6 +324,7 @@ class procar(object):
         # re-generate the DOS with the new kptw
         if self._tdos is not None:
             self.init_dos()
+
     def restore_kpts_weight(self, kptw):
         '''
         set the k-points weights
@@ -319,36 +341,38 @@ class procar(object):
         '''
 
         # print 'calculating dos'
-        emin =  self._eband.min()
-        emax =  self._eband.max()
+        emin = self._eband.min()
+        emax = self._eband.max()
         eran = emax - emin
         emin = emin - eran * 0.05
         emax = emax + eran * 0.05
 
-        self._xen  = np.linspace(emin, emax, self._nedos)
-        self._tdos = np.empty((self._nspin, self._nkpts, self._nbands, self._nedos))
+        self._xen = np.linspace(emin, emax, self._nedos)
+        self._tdos = np.empty(
+            (self._nspin, self._nkpts, self._nbands, self._nedos))
 
         for ispin in range(self._nspin):
             sign = 1 if ispin == 0 else -1
             for ikpt in range(self._nkpts):
                 for iband in range(self._nbands):
                     x0 = self._eband[ispin, ikpt, iband]
-                    self._tdos[ispin, ikpt, iband] = sign * self._kptw[ispin,ikpt] \
-                              * gaussian_smearing_org(self._xen, x0, self._sigma)\
+                    self._tdos[ispin, ikpt, iband] = sign * self._kptw[ispin, ikpt] \
+                        * gaussian_smearing_org(self._xen, x0, self._sigma)\
+
 
     def translate_selection(self, atoms=':', kpts=':', spd=':'):
         '''
         '''
         # string is Iterable too
         assert (isinstance(atoms, int)
-             or isinstance(atoms, Iterable)
-             or isinstance(atoms, str))
+                or isinstance(atoms, Iterable)
+                or isinstance(atoms, str))
         assert (isinstance(kpts, int)
-             or isinstance(kpts, Iterable)
-             or isinstance(kpts, str))
+                or isinstance(kpts, Iterable)
+                or isinstance(kpts, str))
         assert (isinstance(spd, int)
-             or isinstance(spd, Iterable)
-             or isinstance(kpts, str))
+                or isinstance(spd, Iterable)
+                or isinstance(kpts, str))
 
         if isinstance(atoms, int):
             atoms = [atoms]
@@ -469,8 +493,8 @@ class procar(object):
 
         if len(np.arange(self._nkpts)[kpts]) == self._nkpts:
             if np.alltrue(
-                    np.sort(np.arange(self._nkpts)[kpts]) == np.arange(self._nkpts)
-                ):
+                np.sort(np.arange(self._nkpts)[kpts]) == np.arange(self._nkpts)
+            ):
                 used_all_kpts = True
             else:
                 used_all_kpts = False
@@ -485,9 +509,10 @@ class procar(object):
             else:
                 # if not all the k-points are used, then probably we should get
                 # rid of the k-point weights
-                td = self._tdos[ispin, kpts,...] / self._kptw[ispin, kpts, np.newaxis, np.newaxis]
+                td = self._tdos[ispin, kpts, ...] / \
+                    self._kptw[ispin, kpts, np.newaxis, np.newaxis]
 
-            pdos.append(np.sum(pw[...,np.newaxis] * td, axis=(0, 1)))
+            pdos.append(np.sum(pw[..., np.newaxis] * td, axis=(0, 1)))
 
             # pwht = np.sum(self._aproj[ispin][kpts,:,atoms,spd], axis=(-1, -2))
             # pdos.append(np.sum(pwht[..., np.newaxis] * self._tdos[ispin][kpts,...], axis=(0, 1)))
@@ -499,8 +524,8 @@ class procar(object):
         return self._xen, pdos
 
     def get_pband(self, atoms=':', kpts=':', spd=':',
-                        cell=None,
-                        nkseg=None):
+                  cell=None,
+                  nkseg=None):
         '''
         Construct the band structure from PROCAR. In addition, the
         site/k-points/spd-orbital projection of each KS orbital will be
@@ -512,6 +537,7 @@ class procar(object):
         w = self.get_pw(atoms, kpts, spd)
 
         return k, b, e, w
+
 
 ############################################################
 if __name__ == '__main__':
