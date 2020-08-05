@@ -463,6 +463,15 @@ class vaspwfc(object):
                 )
                 out.write("\n" + ''.join([fmt % xx for xx in psi_r.imag]))
 
+
+    def get_ps_wfc(self, *args, **kwargs):
+        '''
+        Alias for the wfc_r method.
+        '''
+
+        return self.wfc_r(*args, **kwargs)
+
+
     def wfc_r(self, ispin=1, ikpt=1, iband=1,
               gvec=None, Cg=None, ngrid=None,
               rescale=None,
