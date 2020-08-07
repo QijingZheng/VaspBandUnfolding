@@ -75,8 +75,10 @@ requirements
 
 # Examples
 
-## Wavefunction in real space
-
+## Pseudowavefunction in real space
+ 
+ 1. Write a simple script and choose whichever state you like.
+ 
 ```python
 from vaspwfc import vaspwfc
 
@@ -102,6 +104,16 @@ Below are the real (left) and imaginary (right) part of the selected KS orbital:
 
 ![real part](./examples/wfc_r/r_resize.png) | 
 ![imaginary part](./examples/wfc_r/i_resize.png)
+
+2. Or you can also use the script `wfcplot`  in the `scripts` folder
+
+```bash
+$ wfcplot -w WAVECAR -p POSCAR -s spin_index -k kpoint_index -n band_index      # for normal WAVECAR
+$ wfcplot -w WAVECAR -p POSCAR -s spin_index -k kpoint_index -n band_index  -lgamma    # for gamma-only WAVECAR
+$ wfcplot -w WAVECAR -p POSCAR -s spin_index -k kpoint_index -n band_index  -lgamma    # for noncollinear WAVECAR
+```
+Please refer to `wfcplot -h` for more information of the usage.
+
 
 ## Electron Localization Function
 ```python
