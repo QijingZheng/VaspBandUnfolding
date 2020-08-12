@@ -53,7 +53,7 @@ def sph_c(xyz, l, m=None):
 
     r, phi, theta = cart2sph(xyz)
     N = xyz.shape[0]
-    ylm = [sph_harm(m, l, phi, theta) for m in range(-l, l+1)]
+    ylm = [sph_harm(M, l, phi, theta) for M in range(-l, l+1)]
 
     if m is None:
         return np.array(ylm, dtype=complex).T
