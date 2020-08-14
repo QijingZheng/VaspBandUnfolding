@@ -372,8 +372,15 @@ class nonlr(object):
         self.kvec = np.asarray(k, dtype=float)
         self.pawpp = [pawpotcar(potstr) for potstr in
                       open(potcar).read().split('End of Dataset')[:-1]]
-        elements, self.elem_cnts = np.unique(atoms.get_chemical_symbols(),
-                                             return_counts=True)
+        elements, elem_first_idx, elem_cnts = np.unique(atoms.get_chemical_symbols(),
+                                                        return_index=True,
+                                                        return_counts=True)
+        # Sometimes, the order of the elements returned by np.unique may not be
+        # consistent with that in POSCAR/POTCAR
+        elem_first_idx = np.argsort(elem_first_idx)
+        elements = elements[elem_first_idx]
+        self.elem_cnts = elem_cnts[elem_first_idx]
+
         assert len(self.elem_cnts) == len(self.pawpp), \
             "The number of elements in POTCAR and POSCAR does not match!"
 
@@ -563,8 +570,15 @@ class nonlq(object):
         self.kvec = np.asarray(k, dtype=float)
         self.pawpp = [pawpotcar(potstr) for potstr in
                       open(potcar).read().split('End of Dataset')[:-1]]
-        elements, self.elem_cnts = np.unique(atoms.get_chemical_symbols(),
-                                             return_counts=True)
+        elements, elem_first_idx, elem_cnts = np.unique(atoms.get_chemical_symbols(),
+                                                        return_index=True,
+                                                        return_counts=True)
+        # Sometimes, the order of the elements returned by np.unique may not be
+        # consistent with that in POSCAR/POTCAR
+        elem_first_idx = np.argsort(elem_first_idx)
+        elements = elements[elem_first_idx]
+        self.elem_cnts = elem_cnts[elem_first_idx]
+            
         assert len(self.elem_cnts) == len(self.pawpp), \
             "The number of elements in POTCAR and POSCAR does not match!"
 
