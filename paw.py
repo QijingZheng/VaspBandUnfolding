@@ -117,11 +117,13 @@ class pawpotcar(object):
     NPSQNL = 100      # no. of data for projectors in reciprocal space
     NPSRNL = 100      # no. of data for projectors in real space
 
-    def __init__(self, potstr):
+    def __init__(self, potstr=None, potfile=None):
         '''
         PAW POTCAR provides the PAW projector functions in real and reciprocal
         space. 
         '''
+        if (potfile is not None) and (potstr is None):
+            potstr = open(potfile).read().split('End of Dataset')[0]
 
         non_radial_part, radial_part = potstr.split('PAW radial sets', 1)
 
@@ -214,11 +216,11 @@ class pawpotcar(object):
         # core region logarithmic radial grid
         self.rgrid = core_data[0]
         # core region all-electron potential
-        self.core_aepot = core_data[1]
+        self.paw_aepot = core_data[1]
         # core region pseudo wavefunction
-        self.core_ps_wfc = core_data[-nproj*2::2, :]
+        self.paw_ps_wfc = core_data[-nproj*2::2, :]
         # core region all-electron wavefunctions
-        self.core_ae_wfc = core_data[-nproj*2+1::2, :]
+        self.paw_ae_wfc = core_data[-nproj*2+1::2, :]
 
     def csplines(self):
         '''
@@ -297,12 +299,12 @@ class pawpotcar(object):
                     self.proj_l[ii])
             )
             l1, = axes[1].plot(
-                # self.rgrid, self.core_ae_wfc[ii], label=f"L = {self.proj_l[ii]}"
-                self.rgrid, self.core_ae_wfc[ii], label="L = {}".format(
+                # self.rgrid, self.paw_ae_wfc[ii], label=f"L = {self.proj_l[ii]}"
+                self.rgrid, self.paw_ae_wfc[ii], label="L = {}".format(
                     self.proj_l[ii])
             )
             axes[1].plot(
-                self.rgrid, self.core_ps_wfc[ii], ls=':',
+                self.rgrid, self.paw_ps_wfc[ii], ls=':',
                 color=l1.get_color()
             )
 
@@ -769,6 +771,6 @@ if __name__ == '__main__':
     # print(ps.symbol)
     # print(ps.lmmax, ps.lmax)
     print(ps)
-    print(ps.core_ae_wfc[1][-1])
+    print(ps.paw_ae_wfc[1][-1])
 
     ps.plot()
