@@ -282,7 +282,7 @@ class pawpotcar(object):
         figure = plt.figure(
             figsize=(8.0, 4.0),
             # figsize = plt.figaspect(0.6),
-            # dpi=300,
+            dpi=240,
         )
 
         axes = [
