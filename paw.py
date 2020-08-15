@@ -212,7 +212,7 @@ class pawpotcar(object):
         nproj = self.proj_l.size
 
         # core region logarithmic radial grid
-        self.core_rgrid = core_data[0]
+        self.rgrid = core_data[0]
         # core region all-electron potential
         self.core_aepot = core_data[1]
         # core region pseudo wavefunction
@@ -297,12 +297,12 @@ class pawpotcar(object):
                     self.proj_l[ii])
             )
             l1, = axes[1].plot(
-                # self.core_rgrid, self.core_ae_wfc[ii], label=f"L = {self.proj_l[ii]}"
-                self.core_rgrid, self.core_ae_wfc[ii], label="L = {}".format(
+                # self.rgrid, self.core_ae_wfc[ii], label=f"L = {self.proj_l[ii]}"
+                self.rgrid, self.core_ae_wfc[ii], label="L = {}".format(
                     self.proj_l[ii])
             )
             axes[1].plot(
-                self.core_rgrid, self.core_ps_wfc[ii], ls=':',
+                self.rgrid, self.core_ps_wfc[ii], ls=':',
                 color=l1.get_color()
             )
 
