@@ -249,6 +249,85 @@ class pawpotcar(object):
                 cs(self.proj_rgrid, rproj, bc_type=((1, y1p), (2, 0)))
             )
 
+    def set_simpi_weight(self):
+        '''
+        Setup weights for simpson integration on radial grid any radial integral
+        can then be evaluated by just summing all radial grid points with the
+        weights SI
+
+        \int dr = \sum_i w(i) * f(i)
+        '''
+
+        self.rad_simp_w = np.zeros_like(self.rgrid)
+        # Number of points in the radial grid
+        N = self.rgrid.size
+        # Logarithmic grid: R(i+1) / R(i) = exp(H)
+        # Logarithmic grid: R(i) = R(0) * exp(H*i)
+        H = np.log((self.rgrid[-1] / self.rgrid[0])**(1. / (N-1)))
+
+        for ii in range(N-1, 2, -2):
+            self.rad_simp_w[ii] = H * self.rgrid[ii] / \
+                3. + self.rad_simp_w[ii]
+            self.rad_simp_w[ii-1] = H * self.rgrid[ii-1] * 4. / 3.
+            self.rad_simp_w[ii-2] = H * self.rgrid[ii-2] / 3.
+
+    def radial_simp_int(self, f):
+        '''
+        Simpson integration of a function on the logarithmic radial grid.
+        '''
+        if not hasattr(self, "rad_simp_w"):
+            self.set_simpi_weight()
+        f = np.asarray(f)
+
+        return np.sum(self.rad_simp_w * f)
+
+    def get_Qij(self):
+        '''
+        Calculate the quantity
+
+            Q_{ij} = < \phi_i^{AE} | \phi_j^{AE} > - < phi_i^{PS} | phi_j^{PS} >
+
+        where \phi^{AE/PS} are the PAW AE/PS waves, which are real functions in
+        VASP PAW POTCAR.
+
+        In POTCAR, only the radial part of the AE/PS partial waves are stored.
+        In order to get the total AE/PS waves, a spherical harmonics should be
+        multiplied to the radial part, i.e. 
+
+            \psi^{AE/PS}(r) = (1. / r) * \phi^{AE/PS}(r) * Y(l, m)
+
+        where \psi(r) is the total AE/PS partial waves, and \phi(r) are the ones
+        stored in POTCAR. Y(l, m) is the real spherical harmonics with quantum
+        number l and m. Note the "1 / r" in front of the equation. In practice,
+        the r**(-2) term disappears when multiply with the integration volume
+        "r**2 sin(theta) d theta d phi".
+
+        In theory, the "Qij" should be integrated inside the PAW cut-off radius,
+        but since the AE and PS partial waves are indentical outside the cut-off
+        radius, therefore the terms outside the cut-off radius cancel each
+        other. 
+        '''
+
+        if not hasattr(self, 'paw_qij'):
+            # The l quantum number of each partial waves
+            LL = [l for l in self.proj_l for m in range(-l, l+1)]
+            # The m quantum number of each partial waves
+            MM = [m for l in self.proj_l for m in range(-l, l+1)]
+            # The index of each partial waves
+            WW = [i for i, l in enumerate(self.proj_l) for m in range(-l, l+1)]
+
+            lmmax = len(LL)
+            self.paw_qij = np.zeros((lmmax, lmmax))
+            for ii in range(lmmax):
+                for jj in range(lmmax):
+                    if (LL[ii] == LL[jj]) and (MM[ii] == MM[jj]):
+                        self.paw_qij[ii, jj] = self.radial_simp_int(
+                            self.paw_ae_wfc[WW[ii]] * self.paw_ae_wfc[WW[jj]] -
+                            self.paw_ps_wfc[WW[ii]] * self.paw_ps_wfc[WW[jj]]
+                        )
+
+        return self.paw_qij
+
     @property
     def symbol(self):
         '''
@@ -397,7 +476,6 @@ class nonlr(object):
                 "    POTCAR: {}\n".format(' '.join([pp.element for pp in self.pawpp])) +
                 "    POSCAR: {}\n".format(' '.join(elements))
             )
-
 
         self.elements = list(elements)
         self.element_idx = [self.elements.index(s) for s in
