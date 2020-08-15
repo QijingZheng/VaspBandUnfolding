@@ -67,7 +67,8 @@ def gvectors(cell, encut, kvec, ngrid=None,
     kvec = np.asarray(kvec)
 
     # force_Gamma: consider gamma-only case regardless of the actual setting
-    if force_gamma: lgam = True
+    if force_gamma:
+        lgam = True
 
     fx, fy, fz = [np.arange(n, dtype=int) for n in ngrid]
     fx[ngrid[0] // 2 + 1:] -= ngrid[0]
@@ -292,11 +293,13 @@ class pawpotcar(object):
         for ii in range(self.lmax):
             axes[0].plot(
                 # self.proj_rgrid, self.rprojs[ii], label=f"L = {self.proj_l[ii]}"
-                self.proj_rgrid, self.rprojs[ii], label="L = {}".format(self.proj_l[ii])
+                self.proj_rgrid, self.rprojs[ii], label="L = {}".format(
+                    self.proj_l[ii])
             )
             l1, = axes[1].plot(
                 # self.core_rgrid, self.core_ae_wfc[ii], label=f"L = {self.proj_l[ii]}"
-                self.core_rgrid, self.core_ae_wfc[ii], label="L = {}".format(self.proj_l[ii])
+                self.core_rgrid, self.core_ae_wfc[ii], label="L = {}".format(
+                    self.proj_l[ii])
             )
             axes[1].plot(
                 self.core_rgrid, self.core_ps_wfc[ii], ls=':',
@@ -383,6 +386,16 @@ class nonlr(object):
 
         assert len(self.elem_cnts) == len(self.pawpp), \
             "The number of elements in POTCAR and POSCAR does not match!"
+        if not np.alltrue([
+            self.pawpp[ii].element.split('_')[0] == elements[ii]
+            for ii in range(len(elements))
+        ]):
+            print(
+                "\nWARNING:\nThe name of elements in POTCAR and POSCAR does not match!\n\n" +
+                "    POTCAR: {}\n".format(' '.join([pp.element for pp in self.pawpp])) +
+                "    POSCAR: {}\n".format(' '.join(elements))
+            )
+
 
         self.elements = list(elements)
         self.element_idx = [self.elements.index(s) for s in
@@ -578,9 +591,18 @@ class nonlq(object):
         elem_first_idx = np.argsort(elem_first_idx)
         elements = elements[elem_first_idx]
         self.elem_cnts = elem_cnts[elem_first_idx]
-            
+
         assert len(self.elem_cnts) == len(self.pawpp), \
             "The number of elements in POTCAR and POSCAR does not match!"
+        if not np.alltrue([
+            self.pawpp[ii].element.split('_')[0] == elements[ii]
+            for ii in range(len(elements))
+        ]):
+            print(
+                "\nWARNING:\nThe name of elements in POTCAR and POSCAR does not match!\n\n" +
+                "    POTCAR: {}\n".format(' '.join([pp.element for pp in self.pawpp])) +
+                "    POSCAR: {}\n".format(' '.join(elements))
+            )
 
         self.elements = list(elements)
         self.element_idx = [self.elements.index(s) for s in
