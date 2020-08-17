@@ -124,6 +124,7 @@ class pawpotcar(object):
         '''
         if (potfile is not None) and (potstr is None):
             potstr = open(potfile).read().split('End of Dataset')[0]
+        assert len(potstr.strip()) != 0, "POTCAR string should not be empty!"
 
         non_radial_part, radial_part = potstr.split('PAW radial sets', 1)
 
@@ -319,12 +320,13 @@ class pawpotcar(object):
             lmmax = len(LL)
             self.paw_qij = np.zeros((lmmax, lmmax))
             for ii in range(lmmax):
-                for jj in range(lmmax):
+                for jj in range(ii+1):
                     if (LL[ii] == LL[jj]) and (MM[ii] == MM[jj]):
                         self.paw_qij[ii, jj] = self.radial_simp_int(
                             self.paw_ae_wfc[WW[ii]] * self.paw_ae_wfc[WW[jj]] -
                             self.paw_ps_wfc[WW[ii]] * self.paw_ps_wfc[WW[jj]]
                         )
+                        self.paw_qij[jj, ii] = self.paw_qij[ii, jj]
 
         return self.paw_qij
 
