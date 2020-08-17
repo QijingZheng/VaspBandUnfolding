@@ -123,6 +123,8 @@ class pawpotcar(object):
         space. 
         '''
         if (potfile is not None) and (potstr is None):
+            # read POTCAR of the first element if there are more than one in the
+            # potfile
             potstr = open(potfile).read().split('End of Dataset')[0]
         assert len(potstr.strip()) != 0, "POTCAR string should not be empty!"
 
