@@ -395,14 +395,25 @@ class vaspwfc(object):
                 elif Gvec.shape[0] == 2 * self._nplws[ikpt - 1] - 1:
                     if not self._lgam:
                         raise ValueError('''
-                        It seems that you are reading a WAVECAR from a GAMMA-ONLY VASP.
-                        Please set 'lgamma = True' when loading the WAVECAR.  Moreover, you
-                        may want to set 'gamma_half = "z"' if you are using VASP version <=
-                        5.2. For example:
+                        It seems that you are reading a WAVECAR from a GAMMA-ONLY VASP.  Please set
+                        'lgamma = True' when loading the WAVECAR.  Moreover, you may want to set
+                        "gamma_half" if you are using VASP version <= 5.2.x.  For VASP <= 5.2.x, check
+                        which FFT VASP uses by the following command:
 
-                            # For VASP <= 5.2
+                            $ grep 'use.* FFT for wave' OUTCAR
+
+                        Then
+
+                            # for parallel FFT, VASP <= 5.2.x
                             wfc = vaspwfc('WAVECAR', lgamma=True, gamma_half='z')
-                            # "gamma_half" default to "x" for VASP > 5.2
+
+                            # for serial FFT, VASP <= 5.2.x
+                            wfc = vaspwfc('WAVECAR', lgamma=True, gamma_half='x')
+
+                        For VASP >= 5.4, WAVECAR is written with x-direction half grid regardless of
+                        parallel or serial FFT.
+
+                            # "gamma_half" default to "x" for VASP >= 5.4
                             wfc = vaspwfc('WAVECAR', lgamma=True, gamma_half='x')
                         ''')
                 else:
