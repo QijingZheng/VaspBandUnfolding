@@ -365,14 +365,15 @@ class pawpotcar(object):
         plt.style.use('ggplot')
 
         figure = plt.figure(
-            figsize=(8.0, 4.0),
+            figsize=(6.4, 6.4),
             # figsize = plt.figaspect(0.6),
             dpi=240,
         )
 
         axes = [
-            plt.subplot(121),   # for projector functions
-            plt.subplot(122)    # for ps/ae partial waves
+            plt.subplot(221),   # for real space projector functions
+            plt.subplot(222),   # for reciprocal space projector functions
+            plt.subplot(212)    # for ps/ae partial waves
         ]
 
         for ii in range(self.lmax):
@@ -381,26 +382,38 @@ class pawpotcar(object):
                 self.proj_rgrid, self.rprojs[ii], label="L = {}".format(
                     self.proj_l[ii])
             )
-            l1, = axes[1].plot(
-                # self.rgrid, self.paw_ae_wfc[ii], label=f"L = {self.proj_l[ii]}"
-                self.rgrid, self.paw_ae_wfc[ii], label="L = {}".format(
+            axes[1].plot(
+                # self.proj_qgrid, self.qprojs[ii], label=f"L = {self.proj_l[ii]}"
+                self.proj_qgrid, self.qprojs[ii], label="L = {}".format(
                     self.proj_l[ii])
             )
-            axes[1].plot(
+
+            l1, = axes[2].plot(
+                # self.rgrid, self.paw_ae_wfc[ii], label=f"L = {self.proj_l[ii]}"
+                self.rgrid, self.paw_ae_wfc[ii], label=r"$L = {}$".format(
+                    self.proj_l[ii])
+            )
+            axes[2].plot(
                 self.rgrid, self.paw_ps_wfc[ii], ls=':',
-                color=l1.get_color()
+                color=l1.get_color(),
+                # label=r"$\tilde\phi_l(r)$ l = {}".format(self.proj_l[ii])
             )
 
-        for ax in axes:
+        for ax in [axes[0], axes[2]]:
             ax.set_xlabel(r'$r\ [\AA]$', labelpad=5)
 
             ax.axhline(y=0, ls=':', color='k', alpha=0.6)
             ax.axvline(x=self.proj_rmax, ls=':', color='k', alpha=0.6)
 
-            ax.legend(loc='best')
+        axes[2].legend(loc='best', fontsize='small', ncol=2)
 
-        axes[0].set_title("Projectors")
-        axes[1].set_title("AE/PS Partial Waves")
+        axes[1].set_xlabel(r'$G\ [\AA^{-1}]$', labelpad=5)
+        axes[1].axhline(y=0, ls=':', color='k', alpha=0.6)
+        axes[1].axvline(x=self.proj_gmax, ls=':', color='k', alpha=0.6)
+
+        axes[0].set_title("Real-space Projectors", fontsize='small')
+        axes[1].set_title("Reciprocal-space Projectors", fontsize='small')
+        axes[2].set_title("AE/PS Partial Waves", fontsize='small')
 
         plt.tight_layout()
         plt.show()
@@ -839,7 +852,7 @@ class radial2grid(object):
 
 if __name__ == '__main__':
     import time
-    xx = open('paw/potcar_ti').read()
+    xx = open('examples/projectors/lreal_true/potcar.mo').read()
 
     t0 = time.time()
     ps = pawpotcar(xx)
@@ -852,7 +865,7 @@ if __name__ == '__main__':
 
     # print(ps.symbol)
     # print(ps.lmmax, ps.lmax)
-    print(ps)
-    print(ps.paw_ae_wfc[1][-1])
+    # print(ps)
+    # print(ps.paw_ae_wfc[1][-1])
 
     ps.plot()
