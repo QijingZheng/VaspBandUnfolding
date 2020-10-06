@@ -111,9 +111,9 @@ def get_pes(rundirs):
     # Tangent forces
     Ftan = []
 
-    l4 = -1
     for image, xx in enumerate(rundirs):
         out = open('{}/OUTCAR'.format(xx)).readlines()
+        l4 = -1
         for ii in range(len(out)-1, 0, -1):
             if 'total drift' in out[ii]:
                 l2 = ii
