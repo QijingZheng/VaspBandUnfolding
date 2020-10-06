@@ -1,0 +1,235 @@
+#!/public/apps/anaconda2/5.0.1/bin/python
+
+import sys
+import os
+import argparse
+import numpy as np
+from glob import glob
+from ase.io import read
+
+
+def parse_cml_args(cml):
+    '''
+    CML parser.
+    '''
+    arg = argparse.ArgumentParser(add_help=True)
+
+    arg.add_argument('-d', '--dirs', dest='rundirs', action='append', type=str,
+                     default=None, nargs='+',
+                     help='The directories where the calculations are done.')
+
+    arg.add_argument('-z', '--zero', dest='izero', action='store', type=int,
+                     default=0,
+                     help='Designate the energy of the image as energy zero, index starting with 0.')
+
+    arg.add_argument('-o', '--out', dest='outFigure', action='store', type=str,
+                     default='pes.png',
+                     help='Save PES figure to file.')
+
+    arg.add_argument('-s', '--figsize', dest='figSize', action='store', type=float,
+                     default=(4.8, 2.4), nargs=2,
+                     help='Size of the PES figure.')
+
+    arg.add_argument('--fromfile', dest='FromFile', action='store', type=str,
+                     default=None,
+                     help='Plot PES from file.')
+
+    arg.add_argument('--tofile', dest='ToFile', action='store', type=str,
+                     default='pes.dat',
+                     help='Save PES data to file.')
+
+    return arg.parse_args(cml)
+
+
+def image_diff(p1, p2):
+    '''
+    '''
+
+    # the difference in fractional coordinate between adjacent images
+    Rd = p2.get_scaled_positions() - p1.get_scaled_positions()
+    Rd[Rd >= 0.5] -= 1.0
+    Rd[Rd < -0.5] += 1.0
+    # the difference in Cartesian coordinate between adjacent images
+    Rc = np.dot(Rd, p1.cell)
+    dr = np.sqrt(np.sum(Rc**2))
+
+    return dr, Rc, Rd
+
+
+def dyn_masks(p):
+    '''
+    '''
+
+    from ase.constraints import FixAtoms, FixScaled
+
+    sflags = np.zeros((len(p), 3), dtype=bool)
+    if p.constraints:
+        for constr in p.constraints:
+            if isinstance(constr, FixScaled):
+                sflags[constr.a] = constr.mask
+            elif isinstance(constr, FixAtoms):
+                sflags[constr.index] = [True, True, True]
+            else:
+                pass
+    return np.logical_not(sflags).astype(float)
+
+
+def get_pes(rundirs):
+    '''
+    '''
+
+    Nimags = len(rundirs)
+    trajs = [
+        read(xx, format='vasp') for xx in
+        [
+            '{}/CONTCAR'.format(dd)
+            if os.path.isfile('{}/CONTCAR'.format(dd))
+            else '{}/POSCAR'.format(dd)
+            for dd in rundirs
+        ]
+    ]
+    Masks = [dyn_masks(p) for p in trajs]
+
+    # the reaction coordinates
+    Q = [0, ] + [
+        image_diff(trajs[ii], trajs[ii+1])[0] for ii in range(len(trajs) - 1)
+    ]
+
+    E = np.array([
+        read('{}/OUTCAR'.format(xx), format='vasp-out').get_potential_energy()
+        for xx in rundirs
+    ])
+    # total forces
+    Ftot = [
+        read('{}/OUTCAR'.format(xx), format='vasp-out').get_forces()
+        for xx in rundirs
+    ]
+    # Tangent forces
+    Ftan = []
+    for ii in range(Nimags):
+        f = None
+        with open('{}/OUTCAR'.format(rundirs[ii])) as out:
+            for line in out:
+                if 'NEB: projection' in line:
+                    f = float(line.split()[-1])
+        if f is None:
+            if ii == 0:
+                dr, Rc, Rd = image_diff(trajs[ii], trajs[ii+1])
+            elif ii == Nimags - 1:
+                dr, Rc, Rd = image_diff(trajs[ii-1], trajs[ii])
+            Rc /= np.linalg.norm(Rc)
+            f = np.sum(Ftot[ii] * Rc * Masks[ii])
+        Ftan.append(f)
+
+    Q = np.cumsum(Q)
+    E = np.asarray(E)
+    Ftan = np.asarray(Ftan)
+
+    return Q, E, Ftan
+
+
+def interp_pes(Q, E, F, N):
+    '''
+    Use a cubic function to fit the PES
+
+        E(x) = a + b*x + c*x**2 + d*x**3
+
+        F(x) = -\partial E(x) \over \partial x
+
+             = b + 2*c*x + 3*d*x**2
+
+    for a segmeng [xi, xj], we have 
+
+        a = Ei
+
+        b = -Fi
+
+            3 * (Ej - Ei) + 3*Fi*(xj - xi) + (Fj - Fi) * (xj - xi)
+        c = ------------------------------------------------------
+                                (xj - xi)**2
+
+                2 * (Ej - Ei) + (Fi + F_j) * (xj - xi)
+        d = - ------------------------------------------
+                              (xj - xi)**3
+
+    '''
+    # from scipy.interpolate import CubicSpline as csp
+    #
+    # Q1 = np.linspace(Q.min(), Q.max(), N)
+    # PES = csp(Q, E, bc_type='natural')
+    # E1 = PES(Q1)
+
+    from scipy.interpolate import PPoly
+
+    dQ = Q[1:] - Q[:-1]
+    dE = E[1:] - E[:-1]
+    dF = F[1:] - F[:-1]
+
+    a = E[:-1]
+    b = -F[:-1]
+    c = (3 * dE + 3 * F[:-1] * dQ + dF * dQ) / dQ**2
+    d = - (2*dE + dQ * (F[1:] + F[:-1])) / dQ**3
+
+    PES = PPoly(np.c_[d, c, b, a].T, Q)
+
+    Q1 = np.linspace(Q.min(), Q.max(), N)
+    E1 = PES(Q1)
+
+    return Q1, E1
+
+
+def plt_pes(PES0, PES_FIT, args):
+    '''
+    '''
+
+    import matplotlib.pyplot as plt
+    plt.style.use('ggplot')
+
+    fig = plt.figure(
+        figsize=args.figSize,
+        dpi=300,
+    )
+    ax = plt.subplot()
+
+    Q, E = PES0
+    Q1, E1 = PES_FIT
+
+    ax.plot(
+        Q1, E1,
+        ls=':', lw=1.0, color='r'
+    )
+
+    ax.plot(
+        Q, E,
+        marker='o', mfc='w', mew=1.0, mec='b',
+        ls='none', lw=1.0, color='r'
+    )
+
+    ax.set_xlabel('Reaction Coordinate', labelpad=5)
+    ax.set_ylabel('Energy [eV]', labelpad=5)
+
+    plt.tight_layout()
+    plt.savefig(args.outFigure)
+    plt.show()
+
+
+def main(cml):
+    p = parse_cml_args(cml)
+
+    if p.rundirs is None:
+        p.rundirs = list(sorted(glob('[0-9]?/')))
+
+    if p.FromFile:
+        Q, E, F = np.loadtxt(p.FromFile, unpack=True)
+        E -= E[p.izero]
+    else:
+        Q, E, F = get_pes(p.rundirs)
+        E -= E[p.izero]
+        np.savetxt(p.ToFile, np.c_[Q, E, F], fmt='%12.6f')
+
+    Q1, E1 = interp_pes(Q, E, F, 1000)
+    plt_pes([Q, E], [Q1, E1], p)
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

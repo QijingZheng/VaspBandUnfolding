@@ -14,5 +14,5 @@ setup(
         'vasp_constant', 'vaspwfc', 'nac', 'unfold', 'procar', 'spinorb',
         'sph_harm', 'paw'
     ],
-    scripts      = ['bin/wfcplot', 'bin/tdmplot', 'bin/potplot']
+    scripts      = ['bin/wfcplot', 'bin/tdmplot', 'bin/potplot', 'bin/nebplot']
 )
