@@ -95,35 +95,64 @@ def get_pes(rundirs):
         image_diff(trajs[ii], trajs[ii+1])[0] for ii in range(len(trajs) - 1)
     ]
 
-    E = np.array([
-        read('{}/OUTCAR'.format(xx), format='vasp-out').get_potential_energy()
-        for xx in rundirs
-    ])
+    # E = np.array([
+    #     # read('{}/OUTCAR'.format(xx), format='vasp-out').get_potential_energy()
+    #     [
+    #         float(line.split()[-1]) for line in open('{}/OUTCAR'.format(xx))
+    #         if 'energy  without' in line
+    #     ]
+    #     for xx in rundirs
+    # ])
+
+    # total energy
+    E = [] 
     # total forces
-    Ftot = [
-        read('{}/OUTCAR'.format(xx), format='vasp-out').get_forces()
-        for xx in rundirs
-    ]
+    Ftot = [ ]
     # Tangent forces
     Ftan = []
-    for ii in range(Nimags):
-        f = None
-        with open('{}/OUTCAR'.format(rundirs[ii])) as out:
-            for line in out:
-                if 'NEB: projection' in line:
-                    f = float(line.split()[-1])
+
+    l4 = -1
+    for image, xx in enumerate(rundirs):
+        out = open('{}/OUTCAR'.format(xx)).readlines()
+        for ii in range(len(out)-1, 0, -1):
+            if 'total drift' in out[ii]:
+                l2 = ii
+            if 'energy  with' in out[ii]:
+                l3 = ii
+            if 'NEB: projection' in out[ii]:
+                l4 = ii
+            if 'TOTAL-FORCE' in out[ii]:
+                l1 = ii
+                break
+        Ftot.append(
+            np.array([
+                line.split()[-3:] for line in out[l1+2:l2-1]],
+                dtype=float
+            )
+        )
+        E.append(float(out[l3].split()[-1]))
+
+
+        if l4 > 0:
+            f = float(out[l4].split()[-1])
+        else:
+            f = None
+
         if f is None:
-            if ii == 0:
-                dr, Rc, Rd = image_diff(trajs[ii], trajs[ii+1])
-            elif ii == Nimags - 1:
-                dr, Rc, Rd = image_diff(trajs[ii-1], trajs[ii])
+            if image == 0:
+                dr, Rc, Rd = image_diff(trajs[image], trajs[image+1])
+            elif image == Nimags - 1:
+                dr, Rc, Rd = image_diff(trajs[image-1], trajs[image])
             Rc /= np.linalg.norm(Rc)
-            f = np.sum(Ftot[ii] * Rc * Masks[ii])
+            f = np.sum(Ftot[image] * Rc * Masks[image])
         Ftan.append(f)
 
     Q = np.cumsum(Q)
     E = np.asarray(E)
-    Ftan = np.asarray(Ftan)
+    if None in Ftan:
+        Ftan = np.zeros_like(Q)
+    else:
+        Ftan = np.asarray(Ftan)
 
     return Q, E, Ftan
 
@@ -153,27 +182,31 @@ def interp_pes(Q, E, F, N):
                               (xj - xi)**3
 
     '''
-    # from scipy.interpolate import CubicSpline as csp
-    #
-    # Q1 = np.linspace(Q.min(), Q.max(), N)
-    # PES = csp(Q, E, bc_type='natural')
-    # E1 = PES(Q1)
+    
+    if np.allclose(F, 0):
+        from scipy.interpolate import CubicSpline as csp
 
-    from scipy.interpolate import PPoly
+        Q1 = np.linspace(Q.min(), Q.max(), N)
+        PES = csp(Q, E, bc_type='natural')
+        E1 = PES(Q1)
 
-    dQ = Q[1:] - Q[:-1]
-    dE = E[1:] - E[:-1]
-    dF = F[1:] - F[:-1]
+    else:
 
-    a = E[:-1]
-    b = -F[:-1]
-    c = (3 * dE + 3 * F[:-1] * dQ + dF * dQ) / dQ**2
-    d = - (2*dE + dQ * (F[1:] + F[:-1])) / dQ**3
+        from scipy.interpolate import PPoly
 
-    PES = PPoly(np.c_[d, c, b, a].T, Q)
+        dQ = Q[1:] - Q[:-1]
+        dE = E[1:] - E[:-1]
+        dF = F[1:] - F[:-1]
 
-    Q1 = np.linspace(Q.min(), Q.max(), N)
-    E1 = PES(Q1)
+        a = E[:-1]
+        b = -F[:-1]
+        c = (3 * dE + 3 * F[:-1] * dQ + dF * dQ) / dQ**2
+        d = - (2*dE + dQ * (F[1:] + F[:-1])) / dQ**3
+
+        PES = PPoly(np.c_[d, c, b, a].T, Q)
+
+        Q1 = np.linspace(Q.min(), Q.max(), N)
+        E1 = PES(Q1)
 
     return Q1, E1
 
