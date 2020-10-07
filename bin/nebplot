@@ -38,6 +38,9 @@ def parse_cml_args(cml):
                      default='pes.dat',
                      help='Save PES data to file.')
 
+    arg.add_argument('--nointerp', dest='interpolate', action='store_false',
+                     help='Do not interpolate the PES.')
+
     return arg.parse_args(cml)
 
 
@@ -105,9 +108,9 @@ def get_pes(rundirs):
     # ])
 
     # total energy
-    E = [] 
+    E = []
     # total forces
-    Ftot = [ ]
+    Ftot = []
     # Tangent forces
     Ftan = []
 
@@ -132,7 +135,6 @@ def get_pes(rundirs):
         )
         E.append(float(out[l3].split()[-1]))
 
-
         if l4 > 0:
             f = float(out[l4].split()[-1])
         else:
@@ -155,6 +157,50 @@ def get_pes(rundirs):
         Ftan = np.asarray(Ftan)
 
     return Q, E, Ftan
+
+
+def find_extrema(C, Q):
+    '''
+    Find extrema of cubic function:
+
+        E(x)  = a + b*x + c*x**2 + d*x**3
+        E'(x) = b + 2*c*x + 3*d*x**2
+
+    Extrema are located at points where E'(x) = 0.
+    '''
+
+    ndata = len(Q)
+    dQ = np.diff(Q)
+
+    X = []
+    E = []
+    for ii in range(ndata - 1):
+        # C stores the coefficients of the piecewise polynomials.
+        d, c, b, a = C[ii]
+        DESC = c**2 - 3*b*d
+
+        # DESC > 0, we have extrema
+        if DESC > 0:
+            # d = 0, quadratic function
+            if np.isclose(d, 0.0):
+                x0 = -b / (2 * c)
+                if (x0 > 0) and (x0 < dQ[ii]):
+                    X.append(x0 / dQ[ii] + ii)
+                    E.append(d*x0**3 + c*x0**2 + b*x0 + a)
+
+            # d != 0, cubic fuction
+            else:
+                for x0 in [
+                    (-c + np.sqrt(DESC)) / (3*d), (-c - np.sqrt(DESC)) / (3*d)
+                ]:
+                    if (x0 > 0) and (x0 < dQ[ii]):
+                        X.append(x0 / dQ[ii] + ii)
+                        E.append(d*x0**3 + c*x0**2 + b*x0 + a)
+    for ii in range(len(X)):
+        print(
+            "Extremum {:d} found at image {:12.6f} with energy {:12.6f} eV!".format(
+                ii + 1, X[ii], E[ii]
+            ))
 
 
 def interp_pes(Q, E, F, N):
@@ -182,7 +228,7 @@ def interp_pes(Q, E, F, N):
                               (xj - xi)**3
 
     '''
-    
+
     if np.allclose(F, 0):
         from scipy.interpolate import CubicSpline as csp
 
@@ -208,6 +254,7 @@ def interp_pes(Q, E, F, N):
         Q1 = np.linspace(Q.min(), Q.max(), N)
         E1 = PES(Q1)
 
+    find_extrema(PES.c.T, Q)
     return Q1, E1
 
 
@@ -260,7 +307,10 @@ def main(cml):
         E -= E[p.izero]
         np.savetxt(p.ToFile, np.c_[Q, E, F], fmt='%12.6f')
 
-    Q1, E1 = interp_pes(Q, E, F, 1000)
+    if p.interpolate:
+        Q1, E1 = interp_pes(Q, E, F, 1000)
+    else:
+        Q1, E1 = Q, E
     plt_pes([Q, E], [Q1, E1], p)
 
 
