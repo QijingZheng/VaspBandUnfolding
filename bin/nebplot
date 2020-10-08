@@ -115,7 +115,14 @@ def get_pes(rundirs):
     Ftan = []
 
     for image, xx in enumerate(rundirs):
-        out = open('{}/OUTCAR'.format(xx)).readlines()
+        if os.path.isfile('{}/OUTCAR'.format(xx)):
+            out = open('{}/OUTCAR'.format(xx)).readlines()
+        elif os.path.isfile('{}/OUTCAR.gz'.format(xx)):
+            import gzip
+            out = gzip.open('{}/OUTCAR.gz'.format(xx), 'rb').readlines()
+        else:
+            raise ValueError('No OUTCAR in {} directory!'.format(xx))
+
         l4 = -1
         for ii in range(len(out)-1, 0, -1):
             if 'total drift' in out[ii]:
