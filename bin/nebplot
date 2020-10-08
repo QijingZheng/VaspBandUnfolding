@@ -296,13 +296,13 @@ def plt_pes(PES0, PES_FIT, args):
 def main(cml):
     p = parse_cml_args(cml)
 
-    if p.rundirs is None:
-        p.rundirs = list(sorted(glob('[0-9]?/')))
-
     if p.FromFile:
         Q, E, F = np.loadtxt(p.FromFile, unpack=True)
         E -= E[p.izero]
     else:
+        if p.rundirs is None:
+            p.rundirs = sorted(glob('[0-9][0-9]/'))
+
         Q, E, F = get_pes(p.rundirs)
         E -= E[p.izero]
         np.savetxt(p.ToFile, np.c_[Q, E, F], fmt='%12.6f')
