@@ -118,8 +118,9 @@ def get_pes(rundirs):
         if os.path.isfile('{}/OUTCAR'.format(xx)):
             out = open('{}/OUTCAR'.format(xx)).readlines()
         elif os.path.isfile('{}/OUTCAR.gz'.format(xx)):
-            import gzip
-            out = gzip.open('{}/OUTCAR.gz'.format(xx), 'rb').readlines()
+            import gzip, io
+            gz  = gzip.open('{}/OUTCAR.gz'.format(xx), 'rb')
+            out = io.BufferedReader(gz).readlines()
         else:
             raise ValueError('No OUTCAR in {} directory!'.format(xx))
 
