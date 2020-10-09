@@ -238,13 +238,8 @@ def interp_pes(Q, E, F, N):
 
     if np.allclose(F, 0):
         from scipy.interpolate import CubicSpline as csp
-
-        Q1 = np.linspace(Q.min(), Q.max(), N)
         PES = csp(Q, E, bc_type='natural')
-        E1 = PES(Q1)
-
     else:
-
         from scipy.interpolate import PPoly
 
         dQ = Q[1:] - Q[:-1]
@@ -258,8 +253,8 @@ def interp_pes(Q, E, F, N):
 
         PES = PPoly(np.c_[d, c, b, a].T, Q)
 
-        Q1 = np.linspace(Q.min(), Q.max(), N)
-        E1 = PES(Q1)
+    Q1 = np.linspace(Q.min(), Q.max(), N)
+    E1 = PES(Q1)
 
     find_extrema(PES.c.T, Q)
     return Q1, E1
