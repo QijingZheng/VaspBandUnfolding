@@ -14,7 +14,7 @@ def parse_cml_args(cml):
     '''
     arg = argparse.ArgumentParser(add_help=True)
 
-    arg.add_argument('-d', '--dirs', dest='rundirs', action='append', type=str,
+    arg.add_argument('-d', '--dirs', dest='rundirs', action='store', type=str,
                      default=None, nargs='+',
                      help='The directories where the calculations are done.')
 
