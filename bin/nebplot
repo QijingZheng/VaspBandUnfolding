@@ -38,8 +38,15 @@ def parse_cml_args(cml):
                      default='pes.dat',
                      help='Save PES data to file.')
 
+    arg.add_argument('--interpFile', dest='interpFile', action='store', type=str,
+                     default='pes_interp.dat',
+                     help='Save PES interpolation data to file.')
+
     arg.add_argument('--nointerp', dest='interpolate', action='store_false',
                      help='Do not interpolate the PES.')
+
+    arg.add_argument('-q', '--quiet', dest='quiet', action='store_true',
+                     help='Do not show the image.')
 
     return arg.parse_args(cml)
 
@@ -293,7 +300,8 @@ def plt_pes(PES0, PES_FIT, args):
 
     plt.tight_layout()
     plt.savefig(args.outFigure)
-    plt.show()
+    if not args.quiet:
+        plt.show()
 
 
 def main(cml):
@@ -312,6 +320,7 @@ def main(cml):
 
     if p.interpolate:
         Q1, E1 = interp_pes(Q, E, F, 1000)
+        np.savetxt(p.interpFile, np.c_[Q1, E1], fmt='%12.6f')
     else:
         Q1, E1 = Q, E
     plt_pes([Q, E], [Q1, E1], p)
