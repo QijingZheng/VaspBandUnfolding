@@ -826,6 +826,9 @@ class vaspwfc(object):
                 # according to the above equation, G = 0 does NOT contribute to TDM.
                 tdm = (np.sum(tmp1[:, np.newaxis] * gvec, axis=0) -
                        np.sum(tmp2[:, np.newaxis] * gvec, axis=0)) / 2.
+            elif self._lsoc:
+                # For the non-collinear case, the wavefunction is a spinor
+                tdm = np.sum(tmp1[:, np.newaxis] * np.r_[gvec, gvec], axis=0)
             else:
                 tdm = np.sum(tmp1[:, np.newaxis] * gvec, axis=0)
 
