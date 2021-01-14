@@ -156,7 +156,7 @@ def showtdm(tdm, p):
 
     SMEAR = 1. / (np.sqrt(2 * np.pi) * p.sigma) * \
         np.exp(
-        -(dE[None, :] - e0[:, None])**2 / p.sigma**2
+        -(dE[None, :] - e0[:, None])**2 / (2*p.sigma**2)
     )
     Tx = np.sum(tdm_abs[:, 0] * SMEAR, axis=1)
     Ty = np.sum(tdm_abs[:, 1] * SMEAR, axis=1)
