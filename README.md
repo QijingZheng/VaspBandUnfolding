@@ -166,7 +166,7 @@ performed with `VASP` and the input files can be found in the
         kg, g = find_K_from_k(kk, M)
         K_in_sup.append(kg)
     # remove the duplicate K-points
-    reducedK = removeDuplicateKpoints(K_in_sup)
+    reducedK, kid = removeDuplicateKpoints(K_in_sup, return_map=True)
 
     # save to VASP KPOINTS
     save2VaspKPOINTS(reducedK)
