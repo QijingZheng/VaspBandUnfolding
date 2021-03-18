@@ -118,6 +118,8 @@ def make_kpath(kbound, nseg=40):
 
 
 def EBS_scatter(kpts, cell, spectral_weight,
+                atomic_weights=None,
+                atomic_colors=[],
                 eref=0.0,
                 nseg=None, save='ebs_s.png',
                 kpath_label=[],
@@ -152,6 +154,13 @@ def EBS_scatter(kpts, cell, spectral_weight,
     nb = spectral_weight.shape[2]
     x0 = np.ones(nb)
 
+    if atomic_weights is not None:
+        atomic_weights = np.asarray(atomic_weights)
+        assert atomic_weights.shape[1:] == spectral_weight.shape[:-1]
+        
+        if not atomic_colors:
+            atomic_colors = mpl.rcParams['axes.prop_cycle'].by_key()['color']
+
     fig = plt.figure()
     fig.set_size_inches(figsize)
     if nspin == 1:
@@ -164,11 +173,19 @@ def EBS_scatter(kpts, cell, spectral_weight,
     for ispin in range(nspin):
         ax = axes[ispin]
         for ik in range(nk):
-            ax.scatter(kdist[ik] * x0,
-                       spectral_weight[ispin, ik, :, 0] - eref,
-                       s=spectral_weight[ispin, ik, :, 1] * factor,
-                       lw=0.0,
-                       color=color)
+            if atomic_weights is not None:
+                for iatom in range(atomic_weights.shape[0]):
+                    ax.scatter(kdist[ik] * x0,
+                               spectral_weight[ispin, ik, :, 0] - eref,
+                               s=spectral_weight[ispin, ik, :, 1] * factor * atomic_weights[iatom],
+                               lw=0.0,
+                               color=atomic_colors[iatom])
+            else:
+                ax.scatter(kdist[ik] * x0,
+                           spectral_weight[ispin, ik, :, 0] - eref,
+                           s=spectral_weight[ispin, ik, :, 1] * factor,
+                           lw=0.0,
+                           color=color)
 
         ax.set_xlim(0, kdist.max())
         ax.set_ylim(*ylim)
