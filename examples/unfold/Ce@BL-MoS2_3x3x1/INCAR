@@ -1,0 +1,36 @@
+General
+  SYSTEM = VaspCalc
+    PREC = Accurate
+   ENCUT = 400 eV
+   ISPIN = 1
+  ISTART = 1
+  ICHARG = 11
+
+Ionic Relaxation
+  IBRION = -1
+     NSW = 1
+
+Electronic relaxation
+    NPAR = 2
+    KPAR = 6
+   IALGO = 38
+#     ALGO = Fast
+  NELMIN = 4
+    NELM = 120
+   EDIFF = 1E-8
+  ISMEAR = 0
+   SIGMA = 0.02
+  LORBIT = 11
+    IVDW = 10
+  NBANDS = 270
+
+Writing Flag
+  NWRITE = 1
+   LWAVE = .TRUE.
+  LCHARG = .FALSE.
+#    LVTOT = .TRUE.
+
+Dipole Correcton
+  LDIPOL = .TRUE.
+  IDIPOL = 3
+   DIPOL = 0.5 0.5 0.5

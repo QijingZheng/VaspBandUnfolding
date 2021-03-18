@@ -227,6 +227,15 @@ performed with `VASP` and the input files can be found in the
    states at the top of figure. This is due to a too small value of `NBANDS` in
    supercell non-scf calculation, and thus those states are not included.
 
+### Band unfolding wth atomic contributions 
+
+After band unfolding, we can also superimpose the atomic contribution of each KS
+states on the spectral weight. Below is the resulting unfolded band structure of
+Ce-doped bilayer-MoS2. Refer to
+`./examples/unfold/Ce@BL-MoS2_3x3x1/plt_unf.py` for the entire code.
+
+   ![imaginary part](./examples/unfold/Ce@BL-MoS2_3x3x1/ebs_s_small.png)
+
 ## Band re-ordering
 
 Band re-ordering is possible by maximizing the overlap between nerghbouring
