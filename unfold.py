@@ -177,7 +177,7 @@ def EBS_scatter(kpts, cell, spectral_weight,
                 for iatom in range(atomic_weights.shape[0]):
                     ax.scatter(kdist[ik] * x0,
                                spectral_weight[ispin, ik, :, 0] - eref,
-                               s=spectral_weight[ispin, ik, :, 1] * factor * atomic_weights[iatom],
+                               s=spectral_weight[ispin, ik, :, 1] * factor * atomic_weights[iatom, ispin, ik, :],
                                lw=0.0,
                                color=atomic_colors[iatom])
             else:
