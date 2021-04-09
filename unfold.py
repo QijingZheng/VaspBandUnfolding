@@ -196,7 +196,7 @@ def EBS_scatter(kpts, cell, spectral_weight,
                 ax.axvline(x=kb, lw=0.5, color='k', ls=':', alpha=0.8)
 
             if kpath_label:
-                ax.set_xticks(np.r_[kdist[::nseg], kdist[-1]])
+                ax.set_xticks(kdist[::nseg])
                 kname = [x.upper() for x in kpath_label]
                 for ii in range(len(kname)):
                     if kname[ii] == 'G':
@@ -269,7 +269,7 @@ def EBS_cmaps(kpts, cell, E0, spectral_function,
                 ax.axvline(x=kb, lw=0.5, color='k', ls=':', alpha=0.8)
 
             if kpath_label:
-                ax.set_xticks(np.r_[kdist[::nseg], kdist[-1]])
+                ax.set_xticks(kdist[::nseg])
                 kname = [x.upper() for x in kpath_label]
                 for ii in range(len(kname)):
                     if kname[ii] == 'G':
