@@ -245,7 +245,7 @@ class pawpotcar(object):
         for l, rproj in zip(self.proj_l, self.rprojs):
             # Copy from VASP pseudo.F, I don't know why y1p depend on "l".
             if l == 1:
-                yp1 = (rproj[1] - rproj[0]) / (self.proj_rmax / self.NPSRNL)
+                y1p = (rproj[1] - rproj[0]) / (self.proj_rmax / self.NPSRNL)
             else:
                 y1p = 0.0
             self.spl_rproj.append(
