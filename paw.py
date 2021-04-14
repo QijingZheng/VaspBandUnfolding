@@ -243,7 +243,7 @@ class pawpotcar(object):
         # (Y'' = 0) is applied at the point N.
         self.spl_rproj = []
         for l, rproj in zip(self.proj_l, self.rprojs):
-            # Copy from VASP pseudo.F, I don't know why y1p depend on "l".
+            # Copy from VASP pseudo.F ln. 444 - 448, I don't know why y1p depend on "l".
             if l == 1:
                 y1p = (rproj[1] - rproj[0]) / (self.proj_rmax / self.NPSRNL)
             else:
