@@ -152,7 +152,7 @@ def EBS_scatter(kpts, cell, spectral_weight,
         ))]
     nk = kdist.size
     nb = spectral_weight.shape[2]
-    x0 = np.ones(nb)
+    x0 = np.outer(np.ones(nb), kdist).T
 
     if atomic_weights is not None:
         atomic_weights = np.asarray(atomic_weights)
@@ -172,20 +172,15 @@ def EBS_scatter(kpts, cell, spectral_weight,
 
     for ispin in range(nspin):
         ax = axes[ispin]
-        for ik in range(nk):
-            if atomic_weights is not None:
-                for iatom in range(atomic_weights.shape[0]):
-                    ax.scatter(kdist[ik] * x0,
-                               spectral_weight[ispin, ik, :, 0] - eref,
-                               s=spectral_weight[ispin, ik, :, 1] * factor * atomic_weights[iatom],
-                               lw=0.0,
-                               color=atomic_colors[iatom])
-            else:
-                ax.scatter(kdist[ik] * x0,
-                           spectral_weight[ispin, ik, :, 0] - eref,
-                           s=spectral_weight[ispin, ik, :, 1] * factor,
-                           lw=0.0,
-                           color=color)
+        if atomic_weights is not None:
+            for iatom in range(atomic_weights.shape[0]):
+                ax.scatter(x0, spectral_weight[ispin, :, :, 0] - eref,
+                            s=spectral_weight[ispin, :, :, 1] * factor * atomic_weights[iatom][ispin,:,:],
+                           lw=0.0, color=atomic_colors[iatom])
+        else:
+            ax.scatter(x0, spectral_weight[ispin, :, :, 0] - eref,
+                       s=spectral_weight[ispin, :, :, 1] * factor,
+                       lw=0.0, color=color)
 
         ax.set_xlim(0, kdist.max())
         ax.set_ylim(*ylim)
@@ -269,7 +264,7 @@ def EBS_cmaps(kpts, cell, E0, spectral_function,
                 ax.axvline(x=kb, lw=0.5, color='k', ls=':', alpha=0.8)
 
             if kpath_label:
-                ax.set_xticks(kdist[::nseg])
+                ax.set_xticks(np.r_[kdist[::nseg], kdist[-1]])
                 kname = [x.upper() for x in kpath_label]
                 for ii in range(len(kname)):
                     if kname[ii] == 'G':
