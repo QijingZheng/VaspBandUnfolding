@@ -114,7 +114,7 @@ def sph_u_r2c(l):
     return sph_u_c2r(l).conj().T
 
 
-def show_sph_harm(l, m, real=True, N=50):
+def show_sph_harm(l, m, real=True, N=50, use_sphere=True):
     '''
     Show the spherical harmonics on a unit sphere
     '''
@@ -152,8 +152,13 @@ def show_sph_harm(l, m, real=True, N=50):
     )
     ax = fig.add_subplot(111, projection='3d')
 
-    ax.plot_surface(x, y, z,  rstride=1, cstride=1,
-                    facecolors=cm.seismic(fcolors))
+    if use_sphere:
+        ax.plot_surface(x, y, z,  rstride=1, cstride=1,
+                        facecolors=cm.seismic(fcolors))
+    else:
+        r0 = np.abs(ylm)
+        ax.plot_surface(x*r0, y*r0, z*r0,  rstride=1, cstride=1,
+                        facecolors=cm.seismic(fcolors))
 
     # Turn off the axis planes
     ax.set_axis_off()
@@ -161,7 +166,7 @@ def show_sph_harm(l, m, real=True, N=50):
 
 
 if __name__ == "__main__":
-    show_sph_harm(l=1, m=0, real=False)
+    show_sph_harm(l=1, m=0, real=False, use_sphere=False)
 
     # N = 50
     # theta = np.linspace(0, np.pi, N)
