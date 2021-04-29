@@ -152,7 +152,8 @@ def EBS_scatter(kpts, cell, spectral_weight,
         ))]
     nk = kdist.size
     nb = spectral_weight.shape[2]
-    x0 = np.outer(np.ones(nb), kdist).T
+    # x0 = np.outer(np.ones(nb), kdist).T
+    x0 = np.tile(kdist, (nb, 1)).T
 
     if atomic_weights is not None:
         atomic_weights = np.asarray(atomic_weights)
