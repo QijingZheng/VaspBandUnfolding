@@ -114,10 +114,13 @@ def sph_u_r2c(l):
     return sph_u_c2r(l).conj().T
 
 
-def show_sph_harm(l, m, real=True, N=50, use_sphere=True):
+def show_sph_harm(l, m, real=True, N=50, use_sphere=True, plot='mpl'):
     '''
     Show the spherical harmonics on a unit sphere
     '''
+
+    assert plot.lower() in ['mpl', 'mayavi', 'plotly']
+
     theta = np.linspace(0, np.pi, N)
     phi = np.linspace(0, 2*np.pi, N)
     theta, phi = np.meshgrid(theta, phi)
@@ -137,50 +140,76 @@ def show_sph_harm(l, m, real=True, N=50, use_sphere=True):
     # t1 = time()
     # print(t1 - t0)
 
-    import matplotlib.pyplot as plt
-    from matplotlib import cm, colors
-    from mpl_toolkits.mplot3d import Axes3D
+    if plot.lower() == 'mpl':
+        import matplotlib.pyplot as plt
+        from matplotlib import cm, colors
+        from mpl_toolkits.mplot3d import Axes3D
 
-    # Calculate the spherical harmonic Y(l,m) and normalize to [0,1]
-    fcolors = ylm
-    fmax, fmin = fcolors.max(), fcolors.min()
-    fcolors = (fcolors - fmin)/(fmax - fmin)
+        # Calculate the spherical harmonic Y(l,m) and normalize to [0,1]
+        fcolors = ylm
+        fmax, fmin = fcolors.max(), fcolors.min()
+        fcolors = (fcolors - fmin)/(fmax - fmin)
 
-    # Set the aspect ratio to 1 so our sphere looks spherical
-    fig = plt.figure(
-        figsize=plt.figaspect(1.)
-    )
-    ax = fig.add_subplot(111, projection='3d')
+        # Set the aspect ratio to 1 so our sphere looks spherical
+        fig = plt.figure(
+            figsize=plt.figaspect(1.)
+        )
+        ax = fig.add_subplot(111, projection='3d')
 
-    if use_sphere:
-        ax.plot_surface(x, y, z,  rstride=1, cstride=1,
-                        facecolors=cm.seismic(fcolors))
+        if use_sphere:
+            ax.plot_surface(x, y, z,  rstride=1, cstride=1,
+                            facecolors=cm.seismic(fcolors))
+        else:
+            r0 = np.abs(ylm)
+            ax.plot_surface(x*r0, y*r0, z*r0,  rstride=1, cstride=1,
+                            facecolors=cm.seismic(fcolors))
+
+        # Turn off the axis planes
+        ax.set_axis_off()
+        plt.show()
+    elif plot == 'mayavi':
+        from mayavi import mlab
+        fig = mlab.figure(size=(800, 800))
+
+        if use_sphere:
+            mlab.mesh(x, y, z)  
+        else:
+            r0 = np.abs(ylm)
+            mlab.mesh(x*r0, y*r0, z*r0)
+
+        mlab.orientation_axes()
+        mlab.show()
+
     else:
-        r0 = np.abs(ylm)
-        ax.plot_surface(x*r0, y*r0, z*r0,  rstride=1, cstride=1,
-                        facecolors=cm.seismic(fcolors))
+        import plotly.graph_objects as go
 
-    # Turn off the axis planes
-    ax.set_axis_off()
-    plt.show()
+        if use_sphere:
+            fig = go.Figure(
+            data=[
+                go.Surface(
+                z=z, x=x, y=y,
+                colorscale='balance', showscale=False, opacity=1.0,
+                hoverinfo='none'
+                )
+            ],
+            )
+        else:
+            r0 = np.abs(ylm)
+            fig = go.Figure(
+                data=[
+                    go.Surface(
+                    z=r0*z, x=r0*x, y=r0*y,
+                    colorscale='balance', showscale=False, opacity=1.0,
+                    hoverinfo='none'
+                    )
+                ],
+            )
+
+        fig.update_layout(
+            width=800, height=800,
+        )
+        fig.show()
 
 
 if __name__ == "__main__":
-    show_sph_harm(l=1, m=0, real=False, use_sphere=False)
-
-    # N = 50
-    # theta = np.linspace(0, np.pi, N)
-    # phi = np.linspace(0, 2*np.pi, N)
-    # theta, phi = np.meshgrid(theta, phi)
-    #
-    # # The Cartesian coordinates of the unit sphere
-    # x = np.sin(theta) * np.cos(phi)
-    # y = np.sin(theta) * np.sin(phi)
-    # z = np.cos(theta)
-    # xyz = np.c_[x.ravel(), y.ravel(), z.ravel()]
-    #
-    # fac = 1. / (np.sqrt(np.pi) * 2)
-    # h0 = sph_r(xyz, l=2, m=0)
-    # h1 = (fac * np.sqrt(5.)/2.) * (3*xyz[:,2]**2-1)
-    # hd = h1 - h0
-    # print(hd.max(), hd.min())
+    show_sph_harm(l=2, m=1, real=False, use_sphere=False, plot='plotly')
