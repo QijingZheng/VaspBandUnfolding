@@ -140,15 +140,15 @@ def show_sph_harm(l, m, real=True, N=50, use_sphere=True, plot='mpl'):
     # t1 = time()
     # print(t1 - t0)
 
+    # Calculate the spherical harmonic Y(l,m) and normalize to [0,1]
+    fcolors = ylm
+    fmax, fmin = fcolors.max(), fcolors.min()
+    fcolors = (fcolors - fmin)/(fmax - fmin)
+
     if plot.lower() == 'mpl':
         import matplotlib.pyplot as plt
         from matplotlib import cm, colors
         from mpl_toolkits.mplot3d import Axes3D
-
-        # Calculate the spherical harmonic Y(l,m) and normalize to [0,1]
-        fcolors = ylm
-        fmax, fmin = fcolors.max(), fcolors.min()
-        fcolors = (fcolors - fmin)/(fmax - fmin)
 
         # Set the aspect ratio to 1 so our sphere looks spherical
         fig = plt.figure(
@@ -172,10 +172,10 @@ def show_sph_harm(l, m, real=True, N=50, use_sphere=True, plot='mpl'):
         fig = mlab.figure(size=(800, 800))
 
         if use_sphere:
-            mlab.mesh(x, y, z)  
+            mlab.mesh(x, y, z, colormap='seismic', scalars=fcolors)  
         else:
             r0 = np.abs(ylm)
-            mlab.mesh(x*r0, y*r0, z*r0)
+            mlab.mesh(x*r0, y*r0, z*r0, colormap='seismic', scalars=fcolors)
 
         mlab.orientation_axes()
         mlab.show()
@@ -212,4 +212,4 @@ def show_sph_harm(l, m, real=True, N=50, use_sphere=True, plot='mpl'):
 
 
 if __name__ == "__main__":
-    show_sph_harm(l=2, m=1, real=False, use_sphere=False, plot='plotly')
+    show_sph_harm(l=2, m=1, real=False, use_sphere=False, plot='mayavi')
