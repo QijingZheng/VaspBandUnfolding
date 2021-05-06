@@ -144,6 +144,8 @@ def show_sph_harm(l, m, real=True, N=50, use_sphere=True, plot='mpl'):
     fcolors = ylm
     fmax, fmin = fcolors.max(), fcolors.min()
     fcolors = (fcolors - fmin)/(fmax - fmin)
+    if not use_sphere:
+        r0 = np.abs(ylm)
 
     if plot.lower() == 'mpl':
         import matplotlib.pyplot as plt
@@ -162,27 +164,35 @@ def show_sph_harm(l, m, real=True, N=50, use_sphere=True, plot='mpl'):
             xmax = ymax = zmax = np.max([x, y, z])
             xmin = ymin = zmin = np.min([x, y, z])
         else:
-            r0 = np.abs(ylm)
             ax.plot_surface(x*r0, y*r0, z*r0,  rstride=1, cstride=1,
                             facecolors=cm.seismic(fcolors))
             xmax = ymax = zmax = np.max([r0*x, r0*y, r0*z])
             xmin = ymin = zmin = np.min([r0*x, r0*y, r0*z])
 
         # Turn off the axis planes
-        ax.set_axis_off()
+        # ax.set_axis_off()
         ax.set_xlim(xmin, xmax)
         ax.set_ylim(ymin, ymax)
         ax.set_zlim(zmin, zmax)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_zticks([])
+
+        ax.set_xlabel('x')
+        ax.set_ylabel('y')
+        ax.set_zlabel('z')
         plt.show()
 
     elif plot == 'mayavi':
         from mayavi import mlab
-        fig = mlab.figure(size=(800, 800))
+        fig = mlab.figure(
+            size=(800, 800),
+            bgcolor=(1,1,1)
+        )
 
         if use_sphere:
             mlab.mesh(x, y, z, colormap='seismic', scalars=fcolors)  
         else:
-            r0 = np.abs(ylm)
             mlab.mesh(x*r0, y*r0, z*r0, colormap='seismic', scalars=fcolors)
 
         mlab.orientation_axes()
@@ -196,17 +206,18 @@ def show_sph_harm(l, m, real=True, N=50, use_sphere=True, plot='mpl'):
             data=[
                 go.Surface(
                 z=z, x=x, y=y,
+                surfacecolor=fcolors,
                 colorscale='balance', showscale=False, opacity=1.0,
                 hoverinfo='none'
                 )
             ],
             )
         else:
-            r0 = np.abs(ylm)
             fig = go.Figure(
                 data=[
                     go.Surface(
                     z=r0*z, x=r0*x, y=r0*y,
+                    surfacecolor=fcolors,
                     colorscale='balance', showscale=False, opacity=1.0,
                     hoverinfo='none'
                     )
@@ -220,4 +231,4 @@ def show_sph_harm(l, m, real=True, N=50, use_sphere=True, plot='mpl'):
 
 
 if __name__ == "__main__":
-    show_sph_harm(l=2, m=1, real=False, use_sphere=False, plot='mpl')
+    show_sph_harm(l=2, m=1, real=True, use_sphere=False, plot='mayavi')
