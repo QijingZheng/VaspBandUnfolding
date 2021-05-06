@@ -159,14 +159,22 @@ def show_sph_harm(l, m, real=True, N=50, use_sphere=True, plot='mpl'):
         if use_sphere:
             ax.plot_surface(x, y, z,  rstride=1, cstride=1,
                             facecolors=cm.seismic(fcolors))
+            xmax = ymax = zmax = np.max([x, y, z])
+            xmin = ymin = zmin = np.min([x, y, z])
         else:
             r0 = np.abs(ylm)
             ax.plot_surface(x*r0, y*r0, z*r0,  rstride=1, cstride=1,
                             facecolors=cm.seismic(fcolors))
+            xmax = ymax = zmax = np.max([r0*x, r0*y, r0*z])
+            xmin = ymin = zmin = np.min([r0*x, r0*y, r0*z])
 
         # Turn off the axis planes
         ax.set_axis_off()
+        ax.set_xlim(xmin, xmax)
+        ax.set_ylim(ymin, ymax)
+        ax.set_zlim(zmin, zmax)
         plt.show()
+
     elif plot == 'mayavi':
         from mayavi import mlab
         fig = mlab.figure(size=(800, 800))
@@ -212,4 +220,4 @@ def show_sph_harm(l, m, real=True, N=50, use_sphere=True, plot='mpl'):
 
 
 if __name__ == "__main__":
-    show_sph_harm(l=2, m=1, real=False, use_sphere=False, plot='mayavi')
+    show_sph_harm(l=2, m=1, real=False, use_sphere=False, plot='mpl')
