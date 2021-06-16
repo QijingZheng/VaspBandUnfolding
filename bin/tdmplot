@@ -99,7 +99,8 @@ def vasptdm(wfc, ibands, jbands, ispin=1, ikpt=1):
     Ex, Ey = np.meshgrid(E_i, E_j, indexing='ij')
     dE = Ey - Ex
 
-    gvec = np.dot(wfc.gvectors(ikpt=ikpt), wfc._Bcell*TPI)
+    k0   = wfc._kvecs[ikpt - 1]
+    gvec = np.dot(wfc.gvectors(ikpt=ikpt) + k0, wfc._Bcell*TPI)
     Cg_i = np.array([
         wfc.readBandCoeff(ispin=ispin, ikpt=ikpt, iband=ii)
         for ii in ibands

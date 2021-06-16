@@ -814,7 +814,8 @@ class vaspwfc(object):
             ovlap = pij.sum()
         else:
             # according to the above equation, G = 0 does NOT contribute to TDM.
-            gvec = np.dot(self.gvectors(ikpt=ks_i[1]), self._Bcell*TPI)
+            k0   = self._kvecs[ks_i[1] - 1]
+            gvec = np.dot(self.gvectors(ikpt=ks_i[1]) + k0, self._Bcell*TPI)
             # planewave coefficients of the two states
             phi_i = self.readBandCoeff(*ks_i, norm=norm)
             phi_j = self.readBandCoeff(*ks_j, norm=norm)
