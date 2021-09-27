@@ -213,6 +213,7 @@ def EBS_cmaps(kpts, cell, E0, spectral_function,
               save='ebs_c.png',
               figsize=(3.0, 4.0),
               ylim=(-3, 3), show=True,
+              contour_plot=False,
               cmap='jet'):
     '''
     plot the effective band structure with colormaps.  The plotting function
@@ -254,7 +255,10 @@ def EBS_cmaps(kpts, cell, E0, spectral_function,
     X, Y = np.meshgrid(kdist, E0 - eref)
     for ispin in range(nspin):
         ax = axes[ispin]
-        ax.contourf(X, Y, spectral_function[ispin], cmap=cmap)
+        if contour_plot:
+            ax.contourf(X, Y, spectral_function[ispin], cmap=cmap)
+        else:
+            ax.pcolormesh(X, Y, spectral_function[ispin], cmap=cmap, shading='auto')
 
         ax.set_xlim(xmin, xmax)
         ax.set_ylim(*ylim)
