@@ -60,18 +60,26 @@ structure. For more information, please refer to the following article and the
 
 # Installation
 
-Put `vasp_constant.py` and `vaspwfc.py` in any directory you like and add the
-path of the directory to `PYTHONPATH`
+- Manual Installation
 
-```bash
-export PYTHONPATH=/the/path/of/your/dir:${PYTHONPATH}
-```
+    Put `vasp_constant.py` and `vaspwfc.py` in any directory you like and add the
+    path of the directory to `PYTHONPATH`
 
-requirements
+    ```bash
+    export PYTHONPATH=/the/path/of/your/dir:${PYTHONPATH}
+    ```
 
-* numpy
-* scipy
-* matplotlib
+    requirements
+
+    * numpy
+    * scipy
+    * matplotlib
+
+- Using Pip
+
+    ```bash
+    pip install git+https://github.com/QijingZheng/VaspBandUnfolding
+    ```
 
 # Examples
 
