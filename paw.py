@@ -657,7 +657,8 @@ class nonlq(object):
     factor of "exp(i(G+k)*R)" is stored in "crexp". The "i^l" is stored in
     "cqfak".
 
-    Note that the phase factor derives from the **shifting property** of the FT.
+    Note that the phase factor derives from the **translation/shifting
+    property** of the FT.
 
     The application of the projector functions on the pseudo-wavefunction can
     then be obtained: C_n = < p_{l,m; R} | \phi_{n,k} >
