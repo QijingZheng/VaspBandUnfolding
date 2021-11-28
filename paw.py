@@ -660,6 +660,9 @@ class nonlq(object):
     Note that the phase factor derives from the **translation/shifting
     property** of the FT.
 
+    [Note 2021-11-28] Refer to this link for radial function FT.
+    http://staff.ustc.edu.cn/~zqj/posts/FourierTransform-Radial-Function/
+
     The application of the projector functions on the pseudo-wavefunction can
     then be obtained: C_n = < p_{l,m; R} | \phi_{n,k} >
 
