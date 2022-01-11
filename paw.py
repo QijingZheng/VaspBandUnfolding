@@ -268,7 +268,7 @@ class pawpotcar(object):
         # Logarithmic grid: R(i) = R(0) * exp(H*i)
         H = np.log((self.rgrid[-1] / self.rgrid[0])**(1. / (N-1)))
 
-        for ii in range(N-1, 2, -2):
+        for ii in range(N-1, 1, -2):
             self.rad_simp_w[ii] = H * self.rgrid[ii] / \
                 3. + self.rad_simp_w[ii]
             self.rad_simp_w[ii-1] = H * self.rgrid[ii-1] * 4. / 3.
