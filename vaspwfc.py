@@ -16,6 +16,14 @@ def save2vesta(phi=None, poscar='POSCAR', prefix='wfc',
     '''
     Save the real space pseudo-wavefunction as vesta format.
     '''
+
+    def get_volume(poscar_str):  # added by ionizing
+        lines = poscar_str.splitlines()
+        scale_factor = float(lines[1].strip())
+        cell_str = lines[2:5]
+        cell = np.array([ list(s.split()) for s in cell_str ], dtype=float)
+        return np.linalg.det(cell) * (scale_factor**3)
+
     nx, ny, nz = phi.shape
     try:
         pos = open(poscar, 'r')
@@ -29,12 +37,14 @@ def save2vesta(phi=None, poscar='POSCAR', prefix='wfc',
     except:
         raise IOError('Failed to open %s' % poscar)
 
+    volume = get_volume(head)  # added by ionizing
+
     # Faster IO
     nrow = phi.size // ncol
     nrem = phi.size % ncol
     fmt = "%16.8E"
 
-    psi = phi.copy()
+    psi = phi * volume  # modified by ionizing
     psi = psi.flatten(order='F')
     psi_h = psi[:nrow * ncol].reshape((nrow, ncol))
     psi_r = psi[nrow * ncol:]
@@ -453,7 +463,7 @@ class vaspwfc(object):
         nrem = phi.size % ncol
         fmt = "%16.8E"
 
-        psi = phi.copy()
+        psi = phi * self._Omega  # modified by ionizing
         psi = psi.flatten(order='F')
         psi_h = psi[:nrow * ncol].reshape((nrow, ncol))
         psi_r = psi[nrow * ncol:]
