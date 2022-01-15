@@ -19,9 +19,9 @@ def save2vesta(phi=None, poscar='POSCAR', prefix='wfc',
 
     def get_volume(poscar_str):  # added by ionizing
         lines = poscar_str.splitlines()
-        scale_factor = float(lines[1].strip())
+        scale_factor = float(lines[1].split()[0])
         cell_str = lines[2:5]
-        cell = np.array([ list(s.split()) for s in cell_str ], dtype=float)
+        cell = np.array([ list(s.split()[0:3]) for s in cell_str ], dtype=float)
         return np.linalg.det(cell) * (scale_factor**3)
 
     nx, ny, nz = phi.shape
