@@ -163,7 +163,7 @@ class procar(object):
         # self._kptv = np.asarray([line.split()[-6:-3]
         # In case that there are no blank spaces before the '-' sign of the
         # k-points coordinates
-        self._kptw = np.asarray([re.sub(r'(\d)-', r'\1 -', line).split()[-6:-3]
+        self._kptv = np.asarray([re.sub(r'(\d)-', r'\1 -', line).split()[-6:-3]
                                  for line in inp if 'weight' in line], dtype=float)
         # in case of spin poliarized calculation
         self._kptv = self._kptv[:self._nkpts]
