@@ -136,9 +136,13 @@ chi = wfc.elf(kptw=kptw, ngrid=[20, 20, 150])
 save2vesta(chi[0], lreal=True, poscar='POSCAR', prefix='elf')
 ```
 **Remember to rename the output file "elf_r.vasp" as "ELFCAR"!**
+
 ## Band unfolding 
 
 Here, we use MoS2 as an example to illustrate the procedures of band unfolding.
+Another example can be found on [my website](http://staff.ustc.edu.cn/~zqj/posts/Band-unfolding-tutorial/).
+
+
 Below is the band structure of MoS2 using a primitive cell. The calculation was
 performed with `VASP` and the input files can be found in the
 `examples/unfold/primitive`
