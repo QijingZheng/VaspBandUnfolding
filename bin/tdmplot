@@ -111,7 +111,8 @@ def vasptdm(wfc, ibands, jbands, ispin=1, ikpt=1):
     ])
 
     if wfc._lsoc:
-        TDM = np.array([
+        nplw = gvec.shape[0]
+        TDM  = np.array([
             np.dot(Cg_i[:, :nplw] * gvec[:, ii], Cg_j[:, :nplw].T.conj()) +
             np.dot(Cg_i[:, nplw:] * gvec[:, ii], Cg_j[:, nplw:].T.conj())
             for ii in range(3)
