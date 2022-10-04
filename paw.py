@@ -355,8 +355,7 @@ class pawpotcar(object):
 
         return np.sum(2 * self.proj_l + 1)
 
-    def plot(self):
-        '''
+    def plot(self): '''
         '''
         import matplotlib as mpl
         import matplotlib.pyplot as plt
@@ -439,6 +438,10 @@ class pawpotcar(object):
 
 class nonlr(object):
     '''
+    Refer to the following post for details.
+
+    https://qijingzheng.github.io/posts/VASP-All-Electron-WFC/#projector-function
+
     Real space presentation of the nonlocal projector functions on a regular 3d grid.
 
         p_{l,m}(r - R) = sqrt(Omega) * f(r - R) * ylm(r - R) * exp(ik*(r - R))
@@ -645,29 +648,9 @@ class nonlr(object):
 
 class nonlq(object):
     '''
-    Reciprocal space presentation of the nonlocal projector functions on a
-    plane-waves grid.
+    Refer to the following post for details.
 
-        p_{l,m; R}(G + k) = (1. / sqrt(Omega) ) *\
-                            i^l * f(G + k) * ylm(G + k) * exp(i(G+k)*R)
-
-    where "f(G + k)" is the radial part of the reciprocal projector functions,
-    which are stored in POTCAR file. "ylm(G+k)" is the real spherical harmonics
-    with corresponding "l" and "m". "Omega" is the volume of the cell. The phase
-    factor of "exp(i(G+k)*R)" is stored in "crexp". The "i^l" is stored in
-    "cqfak".
-
-    Note that the phase factor derives from the **translation/shifting
-    property** of the FT.
-
-    [Note 2021-11-28] Refer to this link for radial function FT.
-    http://staff.ustc.edu.cn/~zqj/posts/FourierTransform-Radial-Function/
-
-    The application of the projector functions on the pseudo-wavefunction can
-    then be obtained: C_n = < p_{l,m; R} | \phi_{n,k} >
-
-        C_n = \sum_G C_{n,k}(G + k) * p_{l,m}(G + k)
-
+    https://qijingzheng.github.io/posts/VASP-All-Electron-WFC/#projector-function
     '''
 
     def __init__(self,
@@ -740,7 +723,7 @@ class nonlq(object):
 
     def phase(self):
         '''
-        Calculates the phasefactor CREXP (exp(i(G + k).R)) for one k-point
+        Calculates the phasefactor CREXP (exp(iG.R)) for one k-point
         '''
         #####################################################################
         # Mind the sigh of "1j" here. I used "-1j" at first, which took me a
