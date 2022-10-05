@@ -712,7 +712,7 @@ class nonlq(object):
         self.nplw = self.Gvec.shape[0]
         # (k + G)-vectors in Cartesian coordinate
         self.Gk = np.dot(
-            self.Gvec + self.kvec, TPI * self.atoms.get_reciprocal_cell()
+            self.Gvec + self.kvec, TPI * self.atoms.cell.reciprocal()
         )
         # G-vectors length
         self.Glen = np.linalg.norm(self.Gk, axis=1)
