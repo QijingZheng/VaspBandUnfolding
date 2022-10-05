@@ -655,7 +655,9 @@ class nonlq(object):
 
     def __init__(self,
                  atoms, encut, potcar='POTCAR', k=[0.0, 0.0, 0.0],
-                 lgam=False, lsoc=False
+                 lgam=False,
+                 gamma_half='x',
+                 lsoc=False,
                  ):
         '''
         input:
@@ -664,6 +666,13 @@ class nonlq(object):
             potcar: the PAW POTCAR file of all the elements in atoms
             k: the k-point vector in fractional coordinate
         '''
+        # for gamma-only wavecar
+        self._lgam = lgam
+        self._gamma_half = gamma_half
+
+        if lgam:
+            assert np.allclose(k, [0, 0, 0])
+
         self.atoms = atoms
         self.natoms = len(atoms)
         self.kvec = np.asarray(k, dtype=float)
@@ -694,7 +703,12 @@ class nonlq(object):
         self.element_idx = [self.elements.index(s) for s in
                             atoms.get_chemical_symbols()]
         # G-vectors in fractional coordinate
-        self.Gvec = gvectors(atoms.cell, encut, k)
+        self.Gvec = gvectors(
+            atoms.cell, encut, k,
+            lgam=lgam,
+            gamma_half=gamma_half,
+        )
+
         self.nplw = self.Gvec.shape[0]
         # (k + G)-vectors in Cartesian coordinate
         self.Gk = np.dot(
@@ -772,6 +786,15 @@ class nonlq(object):
             # np.savetxt('pj.csp.{}'.format(pp.symbol), xxx.T)
 
             tmp /= np.sqrt(self.atoms.get_volume())
+
+            # For gamma-only version, only half of the plane-waves coefficients
+            # are stored in VASP. Moreover, the coefficients with G != 0 are
+            # multiplied by a factor of SQRT2. Here, the momentum-space
+            # projectors also contains half the plane-coefficients and as a
+            # result, we add a SQRT2 factor here.
+            if self._lgam:
+                tmp[:,1:] *= np.sqrt(2.0)
+
             self.qproj.append(tmp)
 
     def proj(self, cptwf, whichatom=None):
@@ -803,7 +826,14 @@ class nonlq(object):
                         (self.qproj[ntype] * iill[:, None]),
                         axis=1
                     )]
-        return np.asarray(beta)
+
+        # For gamma-only version, both the projector function and the
+        # wavefunction are real-valued in real-space. Obviously, the
+        # inner-product is also a real value.
+        if self._lgam:
+            return np.asarray(beta).real
+        else:
+            return np.asarray(beta)
 
 
 class radial2grid(object):
