@@ -672,10 +672,10 @@ class nonlq(object):
 
         if lgam:
             assert np.allclose(k, [0, 0, 0])
+        self.kvec = np.asarray(k, dtype=float)
 
         self.atoms = atoms
         self.natoms = len(atoms)
-        self.kvec = np.asarray(k, dtype=float)
         self.pawpp = [pawpotcar(potstr) for potstr in
                       open(potcar).read().split('End of Dataset')[:-1]]
         elements, elem_first_idx, elem_cnts = np.unique(atoms.get_chemical_symbols(),
