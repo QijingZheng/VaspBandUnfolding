@@ -608,6 +608,7 @@ class vaspwfc(object):
                                 continue
                             phi_k[ii, jj, 0] = phi_k[-ii, -jj, 0].conjugate()
 
+                    # VASP add a factor of SQRT2 for G != 0 in Gamma-only VASP
                     phi_k /= np.sqrt(2.)
                     phi_k[0, 0, 0] *= np.sqrt(2.)
                     return np.fft.irfftn(phi_k, s=ngrid) * normFac
