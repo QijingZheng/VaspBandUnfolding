@@ -75,7 +75,7 @@ def gvectors(cell, encut, kvec, ngrid=None,
     fy[ngrid[1] // 2 + 1:] -= ngrid[1]
     fz[ngrid[2] // 2 + 1:] -= ngrid[2]
     if lgam:
-        if gam_half == 'x':
+        if gamma_half == 'x':
             fx = fx[:ngrid[0] // 2 + 1]
         else:
             fz = fz[:ngrid[2] // 2 + 1]
@@ -355,7 +355,8 @@ class pawpotcar(object):
 
         return np.sum(2 * self.proj_l + 1)
 
-    def plot(self): '''
+    def plot(self):
+        '''
         '''
         import matplotlib as mpl
         import matplotlib.pyplot as plt
