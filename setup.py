@@ -11,7 +11,8 @@ setup(
     url          = 'https://github.com/QijingZheng/VaspBandUnfolding',
     # packages        = ['pyvaspwfc',],
     py_modules   = [
-        'vasp_constant', 'vaspwfc', 'nac', 'unfold', 'procar', 'spinorb',
+        'vasp_constant', 'vaspwfc', 'aewfc',
+        'nac', 'unfold', 'procar', 'spinorb',
         'sph_harm', 'paw'
     ],
     scripts      = ['bin/wfcplot', 'bin/tdmplot', 'bin/potplot', 'bin/nebplot']
