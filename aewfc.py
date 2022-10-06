@@ -11,6 +11,7 @@ from paw import nonlq, pawpotcar, gvectors
 
 from ase.io import read
 from scipy.fft import ifftn, fftn
+from scipy.linalg import block_diag
 
 class vasp_ae_wfc(object):
     '''
@@ -118,6 +119,8 @@ class vasp_ae_wfc(object):
         '''
         self._beta_njk = self._q_proj.proj(Cg)
 
+        return self._beta_njk
+
     def set_ae_ylm(self):
         '''
          Calculate the real spherical harmonics for a set of G-grid points up to
@@ -176,14 +179,32 @@ class vasp_ae_wfc(object):
             self._q_core.append(tmp)
 
 
-    def get_ae_wfc(self, ispin=1, iband=1):
+        # Q_{ij} = < \phi_i^{AE} | \phi_j^{AE} > - < phi_i^{PS} | phi_j^{PS} >
+        self._qij = block_diag(*[
+            self._pawpp[self._element_idx[iatom]].get_Qij()
+            for iatom in range(self._natoms)
+        ])
+
+    def get_ae_norm(self, ispin: int=1, iband: int=1):
+        '''
+        '''
+        
+        Cg = self._pswfc.readBandCoeff(ispin, self._ikpt, iband, norm=False)
+        beta_njk = self.get_beta_njk(Cg)
+
+        ae_norm = (Cg.conj() * Cg).sum() + \
+                  np.dot(
+                      np.dot(beta_njk, self._qij), beta_njk
+                  )
+
+        return ae_norm.real
+    
+    def get_ae_wfc(self, ispin: int=1, iband: int=1):
         '''
         '''
 
         Cg = self._pswfc.readBandCoeff(ispin, self._ikpt, iband, norm=False)
-        self.get_beta_njk(Cg)
-
-        print((Cg*Cg.conj()).sum().real)
+        beta_njk = self.get_beta_njk(Cg)
 
         # The on-site terms
         Sg = np.zeros(self._ae_gl.size, dtype=complex)
@@ -196,7 +217,7 @@ class vasp_ae_wfc(object):
             exp_iGR = self.crexp[:,ii]
 
             Sg += np.sum(
-                iill * self._beta_njk[nproj:nproj+lmmax] * self._q_core[itype].T,
+                iill * beta_njk[nproj:nproj+lmmax] * self._q_core[itype].T,
                 axis=1
             ) * exp_iGR
 
@@ -223,52 +244,60 @@ class vasp_ae_wfc(object):
             return ifftn(phi_ae)
 
 if __name__ == "__main__":
-    import matplotlib.pyplot as plt
-    from vaspwfc import save2vesta
-
-    atoms = read('POSCAR')
-    L = atoms.cell[-1, -1]
-    
-    ps_wfc = vaspwfc('WAVECAR', lgamma=True)
-    ae_wfc = vasp_ae_wfc(ps_wfc, aecut=-25)
-
-    phi_ae = ae_wfc.get_ae_wfc(iband=3) * np.sqrt(np.prod(ae_wfc._aegrid))
-    phi_ps = ps_wfc.get_ps_wfc(iband=3, norm=False, ngrid=ae_wfc._aegrid)
-
-    print((phi_ps**2).sum() )
-    print((phi_ae**2).sum() )
-
-    # save2vesta(phi_ae, prefix='ae')
-    # save2vesta(phi_ps, prefix='ps')
-
-    r_ps = np.arange(phi_ps.shape[-1]) * L / phi_ps.shape[-1]
-    r_ae = np.arange(phi_ae.shape[-1]) * L / phi_ae.shape[-1]
-
-    fig = plt.figure(
-      figsize=plt.figaspect(1.0),
-      dpi=300,
-    )
-    axes = [plt.subplot(2, 2, ii+1) for ii in range(4)]
-
-    ax = axes[0]
-    # ax.plot(r_ps, phi_ps[10, 0].real, color='r', ls='--')
-    # ax.plot(r_ps, phi_ps[10, 0].imag, color='b', ls='--')
-    ax.plot(r_ps, np.abs(phi_ps.real).sum(axis=(0,1)), color='r', ls='--')
-
-    ax = axes[1]
-    ax.imshow(phi_ps[0,:,:].real, extent=(0, L, 0, L))
-
-    ax = axes[2]
-    # ax.plot(r_ae, phi_ae[10, 0].real, color='r', ls='-')
-    # ax.plot(r_ae, phi_ae[10, 0].imag, color='b', ls='-')
-    ax.plot(r_ae, np.abs(phi_ae.real).sum(axis=(0,1)), color='r', ls='-')
-
-    ax = axes[3]
-    ax.imshow(phi_ae[0,:,:].real, extent=(0, L, 0, L))
-
-    # for ax in axes:
-    #     ax.set_xlabel(r'$r$ [$\AA$]')
-    
-    plt.tight_layout()
-    plt.show()
-
+    pass
+    # import matplotlib.pyplot as plt
+    # from vaspwfc import save2vesta
+    #
+    # atoms = read('POSCAR')
+    # L = atoms.cell[-1, -1]
+    #
+    # ps_wfc = vaspwfc('WAVECAR', lgamma=True)
+    # ae_wfc = vasp_ae_wfc(ps_wfc, aecut=-25)
+    #
+    # for iband in range(ps_wfc._nbands):
+    #     # norm of the PSWFC
+    #     cg = ps_wfc.readBandCoeff(iband=iband+1)
+    #     ps_norm = np.sum(cg.conj() * cg).real
+    #     print(f"#band: {iband+1:3d} -> {1 - ps_norm: 10.4f}")
+    #
+    # which_band = 8
+    #
+    # phi_ae = ae_wfc.get_ae_wfc(iband=which_band) * np.sqrt(np.prod(ae_wfc._aegrid))
+    # phi_ps = ps_wfc.get_ps_wfc(iband=which_band, norm=False, ngrid=ae_wfc._aegrid)
+    #
+    # # save2vesta(phi_ae, prefix='ae')
+    # # save2vesta(phi_ps, prefix='ps')
+    #
+    # r_ps = np.arange(phi_ps.shape[-1]) * L / phi_ps.shape[-1]
+    # r_ae = np.arange(phi_ae.shape[-1]) * L / phi_ae.shape[-1]
+    #
+    # fig = plt.figure(
+    #   figsize=plt.figaspect(1.0),
+    #   dpi=300,
+    # )
+    # axes = [plt.subplot(2, 2, ii+1) for ii in range(4)]
+    #
+    # ax = axes[0]
+    # ax.plot(r_ps, phi_ps[0, 0].real, color='r', ls='--')
+    # # ax.plot(r_ps, phi_ps[10, 0].imag, color='b', ls='--')
+    # # ax.plot(r_ps, np.abs(phi_ps.real).sum(axis=(0,1)), color='r', ls='--')
+    # # ax.plot(r_ps, phi_ps.real.sum(axis=(0,1)), color='r', ls='--')
+    #
+    # ax = axes[1]
+    # ax.imshow(np.roll(phi_ps[0,:,:].real, phi_ps.shape[1] // 2, axis=0), extent=(0, L, 0, L))
+    #
+    # ax = axes[0]
+    # ax.plot(r_ae, phi_ae[0, 0].real, color='r', ls='-')
+    # # ax.plot(r_ae, phi_ae[10, 0].imag, color='b', ls='-')
+    # # ax.plot(r_ae, np.abs(phi_ae.real).sum(axis=(0,1)), color='r', ls='-')
+    # # ax.plot(r_ae, phi_ae.real.sum(axis=(0,1)), color='r', ls='-')
+    #
+    # ax = axes[3]
+    # ax.imshow(np.roll(phi_ae[0,:,:].real, phi_ae.shape[1] // 2, axis=0), extent=(0, L, 0, L))
+    #
+    # # for ax in axes:
+    # #     ax.set_xlabel(r'$r$ [$\AA$]')
+    #
+    # plt.tight_layout()
+    # plt.show()
+    # #
