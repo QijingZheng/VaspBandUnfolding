@@ -15,6 +15,9 @@ from scipy.linalg import block_diag
 
 class vasp_ae_wfc(object):
     '''
+    Refer to the following post for details.
+
+    https://qijingzheng.github.io/posts/VASP-All-Electron-WFC
     '''
 
     def __init__(
