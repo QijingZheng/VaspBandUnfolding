@@ -83,6 +83,30 @@ structure. For more information, please refer to the following article and the
 
 # Examples
 
+## All-electron wavefunction in real space
+
+Refer to [this post](https://qijingzheng.github.io/posts/VASP-All-Electron-WFC/)
+for detail formulation.
+
+```python
+
+from vaspwfc import vaspwfc
+from aewfc import vasp_ae_wfc
+
+# the pseudo-wavefunction
+ps_wfc = vaspwfc('WAVECAR', lgamma=True)
+# the all-electron wavefunction
+# here 25x Encut, or 5x grid size is used
+ae_wfc = vasp_ae_wfc(ps_wfc, aecut=-25)
+
+phi_ae = ae_wfc.get_ae_wfc(iband=8)
+```
+
+The comparison of All-electron and pseudo wavefunction of CO<sub>2</sub> HOMO
+can be found in [examples/aewfc/co2](./examples/aewfc/co2).
+
+![CO2 HOMO](./examples/aewfc/co2/co2_homo_aeps_wfc.png)
+
 ## Pseudowavefunction in real space
  
  1. Write a simple script and choose whichever state you like.
