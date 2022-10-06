@@ -199,7 +199,7 @@ class vasp_ae_wfc(object):
 
         return ae_norm.real
     
-    def get_ae_wfc(self, ispin: int=1, iband: int=1):
+    def get_ae_wfc(self, ispin: int=1, iband: int=1, norm=True):
         '''
         '''
 
@@ -238,10 +238,14 @@ class vasp_ae_wfc(object):
             phi_ae[-g1[1:,0], -g1[1:,1], -g1[1:,2]] += Cg[1:].conj()
             phi_ae[-g2[1:,0], -g2[1:,1], -g2[1:,2]] += Sg[1:].conj()
 
+        if norm:
+            # add the factor so that \sum_j |\phi^{ae}_j|^2 = 1
+            fac = np.sqrt(np.prod(self._aegrid))
+
         if self._pswfc._lgam:
-            return ifftn(phi_ae).real
+            return ifftn(phi_ae).real * fac
         else:
-            return ifftn(phi_ae)
+            return ifftn(phi_ae) * fac
 
 if __name__ == "__main__":
     pass
