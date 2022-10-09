@@ -29,7 +29,7 @@ r_ae = np.arange(phi_ae.shape[-1]) * L / phi_ae.shape[-1]
 x, y = np.meshgrid(r_ps - L/2, r_ps - L/2)
 ################################################################################
 fig = plt.figure(
-  figsize=(12, 3.0),
+  figsize=(9, 2.4),
   dpi=300,
 )
 
@@ -94,7 +94,7 @@ for ii in range(3):
         )
         ax.add_artist(leg1)
 
-    ax.text(0.50, 1.02,
+    ax.text(0.50, 1.05,
         wfc_labels[ii],
         ha="center",
         va="bottom",
