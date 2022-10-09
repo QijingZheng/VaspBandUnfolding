@@ -2,6 +2,9 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
+import matplotlib as mpl
+mpl.rcParams['axes.unicode_minus'] = False
+
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
 
@@ -27,9 +30,12 @@ r_ps = np.arange(phi_ps.shape[-1]) * L / phi_ps.shape[-1]
 r_ae = np.arange(phi_ae.shape[-1]) * L / phi_ae.shape[-1]
 
 x, y = np.meshgrid(r_ps - L/2, r_ps - L/2)
+
+orb_min = phi_ae[0].min()
+orb_max = phi_ae[0].max()
 ################################################################################
 fig = plt.figure(
-  figsize=(9, 2.4),
+  figsize=(10, 2.4),
   dpi=300,
 )
 
@@ -42,17 +48,35 @@ atoms_colors = {
 axes[0].pcolor(
     x, y, np.roll(phi_ps[0,:,:], phi_ps.shape[1]//2, axis=0),
     cmap='PiYG', zorder=1,
+    vmin=orb_min, 
+    vmax=orb_max, 
 )
 axes[1].pcolor(
     x, y,
     np.roll(phi_ae[0,:,:], phi_ae.shape[1]//2, axis=0) - \
     np.roll(phi_ps[0,:,:], phi_ps.shape[1]//2, axis=0),
     cmap='PiYG', zorder=1,
+    vmin=orb_min, 
+    vmax=orb_max, 
 )
-axes[2].pcolor(
+orb_map = axes[2].pcolor(
     x, y, np.roll(phi_ae[0,:,:], phi_ae.shape[1]//2, axis=0),
     cmap='PiYG', zorder=1,
+    vmin=orb_min, 
+    vmax=orb_max, 
 )
+
+# cax  = axes[2].inset_axes([1.02, 0.25, 0.03, 0.5])
+cax  = axes[1].inset_axes([0.30, 0.02, 0.40, 0.04])
+cbar = plt.colorbar(
+    orb_map, ax=axes[2], cax=cax,
+    orientation='horizontal',
+    extend='both',
+    ticks=[-0.01, 0, 0.01]
+)
+cbar.ax.tick_params(labelsize='x-small')
+cbar.ax.xaxis.set_ticks_position('top')
+
 
 wfc_labels = [
     r'$\tilde\psi_\mathrm{ps}$',
@@ -86,10 +110,10 @@ for ii in range(3):
             )
         )
 
-    if ii == 1:
+    if ii == 0:
         leg1 = ax.legend(
             atoms_handles.values(), atoms_handles.keys(),
-            loc='lower center', ncol=2,
+            loc='upper right', ncol=2,
             fontsize='small',
         )
         ax.add_artist(leg1)
