@@ -39,17 +39,6 @@ class vasp_ae_wfc(object):
         self._ikpt = ikpt
         self._kvec = self._pswfc._kvecs[ikpt - 1]
         
-        # negative values means "aecut" is abs(aecut) multiples of 'pscut'
-        if aecut < 0:
-            self._aecut = -aecut * self._pscut
-        else:
-            self._aecut = self._pscut if self._pscut > aecut else aecut
-
-        self._aegrid = np.asarray(
-            np.sqrt(self._aecut / self._pscut) * self._pswfc._ngrid + 1.0,
-            dtype=int
-        )
-
         # the poscar storing the atoms information
         self._atoms  = read(poscar)
         self._natoms = len(self._atoms)
@@ -87,6 +76,24 @@ class vasp_ae_wfc(object):
                 "    POSCAR: {}\n".format(' '.join(self._elements))
             )
 
+        self.set_aecut(aecut)
+
+    def set_aecut(self, aecut=-4):
+        '''
+        '''
+        # negative values means "aecut" is abs(aecut) multiples of 'pscut'
+        if aecut < 0:
+            self._aecut = -aecut * self._pscut
+        else:
+            self._aecut = self._pscut if self._pscut > aecut else aecut
+
+        self._aegrid = np.asarray(
+            np.sqrt(self._aecut / self._pscut) * self._pswfc._ngrid + 1.0,
+            dtype=int
+        )
+
+
+        # once aecut is changed, the following quantities must be re-calculated
         self.get_aeps_gvecs()
         self.set_ae_ylm()
         self.set_ae_phase()
@@ -162,24 +169,42 @@ class vasp_ae_wfc(object):
         from pysbt import sbt
         from scipy.interpolate import interp1d
 
-        self._q_core = []
+        self._q_ae_core = []
+        self._q_ps_core = []
         for itype, pp in enumerate(self._pawpp):
             ss    = sbt(pp.rgrid)
             qgrid = np.r_[0, ss.kk]
 
-            tmp = np.zeros((pp.lmmax, self._ae_gl.size))
+            t1 = np.zeros((pp.lmmax, self._ae_gl.size))
+            t2 = np.zeros((pp.lmmax, self._ae_gl.size))
             iL = 0
             for ii, l in enumerate(pp.proj_l):
                 TPL1   = 2*l + 1
-                f1     = pp.paw_ae_wfc[ii] - pp.paw_ps_wfc[ii]
-                g1     = 4*np.pi*ss.run(f1 / pp.rgrid, l=l, include_zero=True)
-                spl_g1 = interp1d(qgrid, g1, kind='cubic')
+                # f1     = pp.paw_ae_wfc[ii] - pp.paw_ps_wfc[ii]
+                # g1     = 4*np.pi*ss.run(f1 / pp.rgrid, l=l, include_zero=True)
+                # spl_g1 = interp1d(qgrid, g1, kind='cubic')
 
-                tmp[iL:iL+TPL1, :] = spl_g1(self._ae_gl) * self.ylm[l].T
+                f1 = pp.paw_ae_wfc[ii]
+                f2 = pp.paw_ps_wfc[ii]
+
+                f1[pp.rgrid >= pp.proj_rmax] = 0.0
+                f2[pp.rgrid >= pp.proj_rmax] = 0.0
+
+                g1     = 4*np.pi*ss.run(f1 / pp.rgrid, l=l, include_zero=True)
+                g2     = 4*np.pi*ss.run(f2 / pp.rgrid, l=l, include_zero=True)
+                spl_g1 = interp1d(qgrid, g1, kind='cubic')
+                spl_g2 = interp1d(qgrid, g2, kind='cubic')
+
+                t1[iL:iL+TPL1, :] = spl_g1(self._ae_gl) * self.ylm[l].T
+                t2[iL:iL+TPL1, :] = spl_g2(self._ae_gl) * self.ylm[l].T
 
                 iL += TPL1
-            tmp /= np.sqrt(self._atoms.get_volume())
-            self._q_core.append(tmp)
+
+            t1 /= np.sqrt(self._atoms.get_volume())
+            t2 /= np.sqrt(self._atoms.get_volume())
+
+            self._q_ae_core.append(t1)
+            self._q_ps_core.append(t2)
 
 
         # Q_{ij} = < \phi_i^{AE} | \phi_j^{AE} > - < phi_i^{PS} | phi_j^{PS} >
@@ -202,7 +227,12 @@ class vasp_ae_wfc(object):
 
         return ae_norm.real
     
-    def get_ae_wfc(self, ispin: int=1, iband: int=1, norm=True):
+    def get_ae_wfc(self,
+            iband: int=1,
+            ispin: int=1,
+            lcore: bool=False,
+            norm=True,
+        ):
         '''
         '''
 
@@ -210,7 +240,8 @@ class vasp_ae_wfc(object):
         beta_njk = self.get_beta_njk(Cg)
 
         # The on-site terms
-        Sg = np.zeros(self._ae_gl.size, dtype=complex)
+        Sg_ae = np.zeros(self._ae_gl.size, dtype=complex)
+        Sg_ps = np.zeros(self._ae_gl.size, dtype=complex)
 
         nproj = 0
         for ii in range(self._natoms):
@@ -219,14 +250,22 @@ class vasp_ae_wfc(object):
             iill    = self.cqfak[itype]
             exp_iGR = self.crexp[:,ii]
 
-            Sg += np.sum(
-                iill * beta_njk[nproj:nproj+lmmax] * self._q_core[itype].T,
+            Sg_ae += np.sum(
+                iill * beta_njk[nproj:nproj+lmmax] * self._q_ae_core[itype].T,
+                axis=1
+            ) * exp_iGR
+
+            Sg_ps += np.sum(
+                iill * beta_njk[nproj:nproj+lmmax] * self._q_ps_core[itype].T,
                 axis=1
             ) * exp_iGR
 
             nproj += lmmax
 
         phi_ae = np.zeros(self._aegrid, dtype=complex)
+        if lcore:
+            core_ae_wfc = np.zeros(self._aegrid, dtype=complex)
+            core_ps_wfc = np.zeros(self._aegrid, dtype=complex)
         
         g1 = self._ps_gv % self._aegrid[None,:]
         g2 = self._ae_gv % self._aegrid[None,:]
@@ -235,20 +274,36 @@ class vasp_ae_wfc(object):
             Cg[1:] /= np.sqrt(2.0)
 
         phi_ae[g1[:,0], g1[:,1], g1[:,2]] += Cg
-        phi_ae[g2[:,0], g2[:,1], g2[:,2]] += Sg
+        phi_ae[g2[:,0], g2[:,1], g2[:,2]] += Sg_ae - Sg_ps
+
+        if lcore:
+            core_ae_wfc[g2[:,0], g2[:,1], g2[:,2]] += Sg_ae
+            core_ps_wfc[g2[:,0], g2[:,1], g2[:,2]] += Sg_ps
 
         if self._pswfc._lgam:
             phi_ae[-g1[1:,0], -g1[1:,1], -g1[1:,2]] += Cg[1:].conj()
-            phi_ae[-g2[1:,0], -g2[1:,1], -g2[1:,2]] += Sg[1:].conj()
+            phi_ae[-g2[1:,0], -g2[1:,1], -g2[1:,2]] += Sg_ae[1:].conj() - Sg_ps[1:].conj()
 
-        if norm:
-            # add the factor so that \sum_j |\phi^{ae}_j|^2 = 1
-            fac = np.sqrt(np.prod(self._aegrid))
+            if lcore:
+                core_ae_wfc[g2[1:,0], g2[1:,1], g2[1:,2]] += Sg_ae[1:].conj()
+                core_ps_wfc[g2[1:,0], g2[1:,1], g2[1:,2]] += Sg_ps[1:].conj()
+
+        fac = np.sqrt(np.prod(self._aegrid)) if norm else 1.0
 
         if self._pswfc._lgam:
-            return ifftn(phi_ae).real * fac
+            if lcore:
+                return ifftn(phi_ae).real * fac, \
+                       ifftn(core_ae_wfc).real * fac, \
+                       ifftn(core_ps_wfc).real * fac
+            else:
+                return ifftn(phi_ae).real * fac
         else:
-            return ifftn(phi_ae) * fac
+            if lcore:
+                return ifftn(phi_ae) * fac, \
+                       ifftn(core_ae_wfc) * fac, \
+                       ifftn(core_ps_wfc) * fac
+            else:
+                return ifftn(phi_ae) * fac
 
 if __name__ == "__main__":
     pass
