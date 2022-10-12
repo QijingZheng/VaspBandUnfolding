@@ -48,7 +48,7 @@ fig = plt.figure(
 )
 
 axes = [plt.subplot(2, 3, ii+1) for ii in range(6)]
-cax  = axes[1].inset_axes([0.00, 0.10, 1.00, 0.05])
+cax  = axes[1].inset_axes([-0.1, 0.10, 1.20, 0.06])
 
 atoms_colors = {
     'C': 'black',
@@ -81,7 +81,7 @@ for ii in range(6):
 
         leg1 = ax.legend(
             atoms_handles.values(), atoms_handles.keys(),
-            loc='center', ncol=2,
+            loc='center', # ncol=2,
             fontsize='small',
         )
         ax.add_artist(leg1)
@@ -89,8 +89,10 @@ for ii in range(6):
 
 
     wfc_c = orb_x0_plane[i_phi]
-    orb_map = ax.pcolor(
+    # orb_map = ax.pcolor(
+    orb_map = ax.contourf(
         x, y, np.roll(wfc_c, wfc_c.shape[0] // 2, axis=0),
+        levels=30,
         cmap='PiYG', zorder=1,
         vmin=orb_min, 
         vmax=orb_max, 
