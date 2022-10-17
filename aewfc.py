@@ -2,7 +2,10 @@
 
 import numpy as np
 
-from pysbt import pysbt
+try:
+    from pysbt import pysbt
+except ImportError:
+    print("Please install pySBT (https://github.com/QijingZheng/pySBT)!")
 
 from vaspwfc import vaspwfc
 from vasp_constant import *
