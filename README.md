@@ -105,6 +105,7 @@ phi_ae = ae_wfc.get_ae_wfc(iband=8)
 The comparison of All-electron and pseudo wavefunction of CO<sub>2</sub> HOMO
 can be found in [examples/aewfc/co2](./examples/aewfc/co2).
 
+![CO2 HOMO](./examples/aewfc/co2/ae-ps-core_co2_homo_wfc.png)
 ![CO2 HOMO](./examples/aewfc/co2/co2_homo_aeps_wfc_rs.png)
 
 ## Pseudowavefunction in real space
