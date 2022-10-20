@@ -486,7 +486,7 @@ class vaspwfc(object):
     def wfc_r(self, ispin=1, ikpt=1, iband=1,
               gvec=None, Cg=None, ngrid=None,
               rescale=None,
-              norm=True, kr_phase=False, r0=[0.0, 0.0, 0.0]):
+              norm=False, kr_phase=False, r0=[0.0, 0.0, 0.0]):
         '''
         Obtain the pseudo-wavefunction of the specified KS states in real space
         by performing FT transform on the reciprocal space planewave
