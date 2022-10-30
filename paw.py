@@ -355,6 +355,25 @@ class pawpotcar(object):
 
         return np.sum(2 * self.proj_l + 1)
 
+    @property
+    def lmax(self):
+        '''
+        Return total number of l-channel projector functions.
+        '''
+
+        return self.proj_l.size
+
+    @property
+    def ilm(self):
+        '''
+        '''
+
+        return [
+            (i, l, m)
+            for i, l in enumerate(self.proj_l)
+            for m in range(-l, l+1)
+        ]
+
     def plot(self):
         '''
         '''
