@@ -284,11 +284,65 @@ class pawpotcar(object):
 
         return np.sum(self.rad_simp_w * f)
 
+    def get_nablaij(self):
+        '''
+        Calculate the quantity
+
+            nabla_{ij} = < \phi_i^{AE} | nabla_r | \phi_j^{AE} > -
+                         < \phi_i^{PS} | nabla_r | \phi_j^{PS} >
+
+        where \phi^{AE/PS} are the PAW AE/PS waves, which are real functions in
+        VASP PAW POTCAR.
+        '''
+        if not hasattr(self, 'paw_nablaij'):
+            from pysbt import sbt, GauntTable
+
+            self.paw_nablaij = np.zeros((3, self.lmmax, self.lmmax))
+            ss = sbt(self.rgrid, kmax=200)
+
+            paw_ae_wfcq = []
+            paw_ps_wfcq = []
+            for ii, l in enumerate(self.proj_l):
+                R1 = self.paw_ae_wfc[ii]
+                R2 = self.paw_ps_wfc[ii]
+
+                G1 = ss.run(R1 / self.rgrid, l=l, norm=True)
+                G2 = ss.run(R2 / self.rgrid, l=l, norm=True)
+
+                paw_ae_wfcq.append(G1)
+                paw_ps_wfcq.append(G2)
+
+            for ii in range(self.lmmax):
+                for jj in range(ii):
+                    n1, l1, m1 = self.ilm[ii]
+                    n2, l2, m2 = self.ilm[jj]
+                    # xyz component of the angular port
+                    nabla_ij_a  = np.sqrt(4 * np.pi / 3.) * np.array([
+                        GauntTable(l1, l2, 1, m1, m2, m) for m in [1, -1, 0]
+                    ]) 
+
+                    if np.allclose(nabla_ij_a, 0):
+                        continue
+
+                    # radial part
+                    nabla_ij_r = np.sum(
+                        ss.simp_wht_kk * ss.kk**3 *
+                        ((paw_ae_wfcq[n1] * paw_ae_wfcq[n2]) -
+                         (paw_ps_wfcq[n1] * paw_ps_wfcq[n2]))
+                    )
+
+                    phase = (-1j)**(l2-l1-1)
+                    self.paw_nablaij[:,ii,jj] =  phase.real * nabla_ij_r * nabla_ij_a
+                    self.paw_nablaij[:,jj,ii] = -self.paw_nablaij[:,ii,jj]
+
+
+        return self.paw_nablaij
+
     def get_Qij(self):
         '''
         Calculate the quantity
 
-            Q_{ij} = < \phi_i^{AE} | \phi_j^{AE} > - < phi_i^{PS} | phi_j^{PS} >
+            Q_{ij} = < \phi_i^{AE} | \phi_j^{AE} > - < \phi_i^{PS} | \phi_j^{PS} >
 
         where \phi^{AE/PS} are the PAW AE/PS waves, which are real functions in
         VASP PAW POTCAR.
