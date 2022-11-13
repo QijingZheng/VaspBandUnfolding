@@ -216,7 +216,7 @@ visulize the projector function and partial waves.
 # `Ti` POTCAR for exampleTCAR for example
 potplot -p POTCAR   
 ```
-![Ti POTCAR](/examples/potplot/Ti_pot.png)
+![Ti POTCAR](examples/potplot/ti_pot.png)
 
 As the name suggests, `paw.py` also contains the methods (`nonlq` and `nonlr`
 class) to calculate the inner products of the projector function and the
