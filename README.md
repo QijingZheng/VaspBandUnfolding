@@ -28,6 +28,7 @@
   ```bash
   git clone https://github.com/QijingZheng/VaspBandUnfolding
   # set the 
+  cd VaspBandUnfolding
   python setup.py install --prefix=/the/path/of/your/dir/
   export PYTHONPATH=/the/path/of/your/dir:${PYTHONPATH}
   ```
