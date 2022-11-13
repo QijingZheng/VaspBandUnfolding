@@ -12,7 +12,7 @@
 
 - `unfold.py` can be used to perform band unfolding from supercell calculations.
 
-# Installation
+## Installation
 
 -  Requirements
 
