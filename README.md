@@ -131,7 +131,9 @@
 
 - All-electron wavefunction in real space
 
-  Refer to [this post](https://qijingzheng.github.io/posts/VASP-All-Electron-WFC/) for detail formulation.
+  Refer to this post for detail formulation.
+
+  > [PAW All-Electron Wavefunction in VASP](https://qijingzheng.github.io/posts/VASP-All-Electron-WFC/)
   
   ```python
   #/usr/bin/env python
