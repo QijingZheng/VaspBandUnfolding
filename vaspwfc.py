@@ -753,13 +753,10 @@ class vaspwfc(object):
         assert 1 <= ikpt <= self._nkpts,  'Invalid kpoint index!'
         assert 1 <= iband <= self._nbands, 'Invalid band index!'
 
-    def TransitionDipoleMoment(self, ks_i, ks_j, norm=True,
-                               realspace=False):
+    def TransitionDipoleMoment(self, ks_i, ks_j, norm=True):
         '''
-        calculate Transition Dipole Moment (TDM) between two KS states.
-
-        If "realspace = False", the TDM will be evaluated in momentum space
-        according to the formula in:
+        calculate Transition Dipole Moment (TDM) between two KS states according
+        to the formula in:
         https://en.wikipedia.org/wiki/Transition_dipole_moment
 
                                     i⋅h
@@ -773,8 +770,6 @@ class vaspwfc(object):
                                                 ╱                
                                                ‾‾‾‾              
                                                  i               
-
-        Otherwise, the TDM will be evaluated in real space.
 
         Note: |psi_a> and |psi_b> should be bloch function with 
               the same k vector.
@@ -794,47 +789,27 @@ class vaspwfc(object):
         E2 = self._bands[ks_j[0]-1, ks_j[1]-1, ks_j[2]-1]
         dE = E2 - E1
 
-        if realspace:
-            fx = np.linspace(0, 1, self._ngrid[0], endpoint=False)
-            fy = np.linspace(0, 1, self._ngrid[1], endpoint=False)
-            fz = np.linspace(0, 1, self._ngrid[2], endpoint=False)
+        # according to the above equation, G = 0 does NOT contribute to TDM.
+        k0   = self._kvecs[ks_i[1] - 1]
+        gvec = np.dot(self.gvectors(ikpt=ks_i[1]) + k0, self._Bcell*TPI)
+        # planewave coefficients of the two states
+        phi_i = self.readBandCoeff(*ks_i, norm=norm)
+        phi_j = self.readBandCoeff(*ks_j, norm=norm)
 
-            Dx, Dy, Dz = np.meshgrid(fx, fy, fz, indexing='ij')
-            Rx, Ry, Rz = np.tensordot(self._Acell, [Dx, Dy, Dz], axes=[0, 0])
-
-            fac = np.sqrt(np.prod(self._ngrid) / self._Omega)
-            phi_i = self.wfc_r(*ks_i, norm=True, ngrid=self._ngrid)
-            phi_j = self.wfc_r(*ks_j, norm=True, ngrid=self._ngrid)
-
-            pij = phi_i.conjugate() * phi_j
-            tdm = np.array([
-                np.sum(pij * Rx),
-                np.sum(pij * Ry),
-                np.sum(pij * Rz)
-            ])
-            ovlap = pij.sum()
-        else:
+        tmp1 = phi_i.conjugate() * phi_j
+        ovlap = np.sum(tmp1)
+        if self._lgam:
+            tmp2 = phi_i * phi_j.conjugate()
             # according to the above equation, G = 0 does NOT contribute to TDM.
-            k0   = self._kvecs[ks_i[1] - 1]
-            gvec = np.dot(self.gvectors(ikpt=ks_i[1]) + k0, self._Bcell*TPI)
-            # planewave coefficients of the two states
-            phi_i = self.readBandCoeff(*ks_i, norm=norm)
-            phi_j = self.readBandCoeff(*ks_j, norm=norm)
+            tdm = (np.sum(tmp1[:, np.newaxis] * gvec, axis=0) -
+                   np.sum(tmp2[:, np.newaxis] * gvec, axis=0)) / 2.
+        elif self._lsoc:
+            # For the non-collinear case, the wavefunction is a spinor
+            tdm = np.sum(tmp1[:, np.newaxis] * np.r_[gvec, gvec], axis=0)
+        else:
+            tdm = np.sum(tmp1[:, np.newaxis] * gvec, axis=0)
 
-            tmp1 = phi_i.conjugate() * phi_j
-            ovlap = np.sum(tmp1)
-            if self._lgam:
-                tmp2 = phi_i * phi_j.conjugate()
-                # according to the above equation, G = 0 does NOT contribute to TDM.
-                tdm = (np.sum(tmp1[:, np.newaxis] * gvec, axis=0) -
-                       np.sum(tmp2[:, np.newaxis] * gvec, axis=0)) / 2.
-            elif self._lsoc:
-                # For the non-collinear case, the wavefunction is a spinor
-                tdm = np.sum(tmp1[:, np.newaxis] * np.r_[gvec, gvec], axis=0)
-            else:
-                tdm = np.sum(tmp1[:, np.newaxis] * gvec, axis=0)
-
-            tdm = 1j / (dE / (2*RYTOEV)) * tdm * AUTOA * AUTDEBYE
+        tdm = 1j / (dE / (2*RYTOEV)) * tdm * AUTOA * AUTDEBYE
 
         return E1, E2, dE, ovlap, tdm
 
