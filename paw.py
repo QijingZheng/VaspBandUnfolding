@@ -284,7 +284,7 @@ class pawpotcar(object):
 
         return np.sum(self.rad_simp_w * f)
 
-    def get_nablaij(self):
+    def get_nablaij(self, kmax=200):
         '''
         Calculate the quantity
 
@@ -298,7 +298,7 @@ class pawpotcar(object):
             from pysbt import sbt, GauntTable
 
             self.paw_nablaij = np.zeros((3, self.lmmax, self.lmmax))
-            ss = sbt(self.rgrid, kmax=200)
+            ss = sbt(self.rgrid, kmax=kmax)
 
             paw_ae_wfcq = []
             paw_ps_wfcq = []
@@ -334,7 +334,6 @@ class pawpotcar(object):
                     phase = (-1j)**(l2-l1-1)
                     self.paw_nablaij[:,ii,jj] =  phase.real * nabla_ij_r * nabla_ij_a
                     self.paw_nablaij[:,jj,ii] = -self.paw_nablaij[:,ii,jj]
-
 
         return self.paw_nablaij
 
