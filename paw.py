@@ -407,7 +407,7 @@ class pawpotcar(object):
                         R2 = R2_ae - R2_ps
 
                         self.paw_nablaij[:,ii, jj] = R1 * A1 + R2 * A2
-                        self.paw_nablaij[:,jj, ii] = -self.paw_nablaij[:,ii,jj]
+                        # self.paw_nablaij[:,jj, ii] = -self.paw_nablaij[:,ii,jj]
             else:
                 from pysbt import sbt, GauntTable
 
