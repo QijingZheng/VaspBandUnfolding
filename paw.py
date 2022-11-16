@@ -109,6 +109,53 @@ def gvectors(cell, encut, kvec, ngrid=None,
     return np.asarray(Gvec, dtype=int)
 
 
+def radial_grad(rr, fr):
+    '''
+    Calculate the gradient of a function f(r) defined on the radial
+    logarithmatic grid.
+    
+        \nabla f(r) = d/dr f(r)
+
+    Adopted from VASP source file: radial.F
+    '''
+    h  = np.log(rr[1] / rr[0])
+    nr = rr.size
+    gr = np.zeros_like(fr)
+
+    # forward differences are used for the 1st and 2nd point
+    gr[0] = (1./h) * (
+                (6.*fr[1] + 20./3.*fr[3] + 1.2*fr[5]) 
+                -
+                (2.45*fr[0] + 7.5*fr[2] + 3.75*fr[4] + 1./6.*fr[6])
+            )
+    gr[1] = (1./h) * (
+                (6.*fr[2] + 20./3.*fr[4] + 1.2*fr[6]) 
+                -
+                (2.45*fr[1] + 7.5*fr[3] + 3.75*fr[5] + 1./6.*fr[7])
+            )
+
+    # Five points formula
+    for ii in range(2, nr - 2):
+        gr[ii] = (1./ 12 / h) * (
+                    (fr[ii-2] + 8.*fr[ii+1]) - (8.*fr[ii-1] + fr[ii+2])
+                )
+
+    # backward differences for the last two points
+    gr[nr-2] = (1./h) * (
+                -1./12.*fr[nr-5] + 0.5*fr[nr-4]-1.5*fr[nr-3] 
+                +5./6.*fr[nr-2] + 0.25*fr[nr-1]
+            )
+    gr[nr-1] = (1./h) * (
+                0.25*fr[nr-5] - 4./3.*fr[nr-4] + 3.*fr[nr-3] 
+                    -4.*fr[nr-2] + 25./12.*fr[nr-1]
+            )
+
+    # account for logarithmic mesh
+    gr /= rr
+
+    return gr
+
+
 class pawpotcar(object):
     '''
     Read projector functions and ae/ps partialwaves from VASP PBE POTCAR.
@@ -284,7 +331,7 @@ class pawpotcar(object):
 
         return np.sum(self.rad_simp_w * f)
 
-    def get_nablaij(self, kmax=200):
+    def get_nablaij(self, lreal: bool=True, lforce: bool=False, kmax=200):
         '''
         Calculate the quantity
 
@@ -293,47 +340,114 @@ class pawpotcar(object):
 
         where \phi^{AE/PS} are the PAW AE/PS waves, which are real functions in
         VASP PAW POTCAR.
+
+        Please refer to the following link for detail formulation
+
+            http://qijingzheng.github.io/posts/Light-Matter-Interaction-and-Dipole-Transition-Matrix/
         '''
-        if not hasattr(self, 'paw_nablaij'):
-            from pysbt import sbt, GauntTable
+        
+        # Calculate paw_nablaij only in these two cases:
+        # 1. paw_nablaij not defined
+        # 2. lforce = True, re-calculate it regardless of its existence
 
-            self.paw_nablaij = np.zeros((3, self.lmmax, self.lmmax))
-            ss = sbt(self.rgrid, kmax=kmax)
+        if not hasattr(self, 'paw_nablaij') or lforce:
+            if lreal:
+                from pysbt import GauntTable, ylm_nabla_rlylm
+                grad_ps_wfc = []
+                grad_ae_wfc = []
 
-            paw_ae_wfcq = []
-            paw_ps_wfcq = []
-            for ii, l in enumerate(self.proj_l):
-                R1 = self.paw_ae_wfc[ii]
-                R2 = self.paw_ps_wfc[ii]
-
-                G1 = ss.run(R1 / self.rgrid, l=l, norm=True)
-                G2 = ss.run(R2 / self.rgrid, l=l, norm=True)
-
-                paw_ae_wfcq.append(G1)
-                paw_ps_wfcq.append(G2)
-
-            for ii in range(self.lmmax):
-                for jj in range(ii):
-                    n1, l1, m1 = self.ilm[ii]
-                    n2, l2, m2 = self.ilm[jj]
-                    # xyz component of the angular port
-                    nabla_ij_a  = np.sqrt(4 * np.pi / 3.) * np.array([
-                        GauntTable(l1, l2, 1, m1, m2, m) for m in [1, -1, 0]
-                    ]) 
-
-                    if np.allclose(nabla_ij_a, 0):
-                        continue
-
-                    # radial part
-                    nabla_ij_r = np.sum(
-                        ss.simp_wht_kk * ss.kk**3 *
-                        ((paw_ae_wfcq[n1] * paw_ae_wfcq[n2]) -
-                         (paw_ps_wfcq[n1] * paw_ps_wfcq[n2]))
+                rr = self.rgrid
+                for ii, l in enumerate(self.proj_l):
+                    grad_ps_wfc.append(
+                        radial_grad(rr, self.paw_ps_wfc[ii])
+                    )
+                    grad_ae_wfc.append(
+                        radial_grad(rr, self.paw_ae_wfc[ii])
                     )
 
-                    phase = (-1j)**(l2-l1-1)
-                    self.paw_nablaij[:,ii,jj] =  phase.real * nabla_ij_r * nabla_ij_a
-                    self.paw_nablaij[:,jj,ii] = -self.paw_nablaij[:,ii,jj]
+                self.paw_nablaij = np.zeros((3, self.lmmax, self.lmmax))
+                for ii in range(self.lmmax):
+                    for jj in range(self.lmmax):
+                        n1, l1, m1 = self.ilm[ii]
+                        n2, l2, m2 = self.ilm[jj]
+
+                        A1 = np.sqrt(4*np.pi / 3) * np.array([
+                            GauntTable(l1, l2, 1, m1, m2, m)
+                            for m in [1, -1, 0]
+                        ])
+
+                        if (l1, m1, l2, m2) in ylm_nabla_rlylm:
+                            A2 = np.array(ylm_nabla_rlylm[(l1, m1, l2, m2)])
+                        else:
+                            A2 = np.zeros(3)
+
+                        if np.allclose(A1,0) and np.allclose(A2,0):
+                            self.paw_nablaij[:,ii,jj] = 0.0
+                            continue
+                        
+                        R1_ae = self.radial_simp_int(
+                                self.paw_ae_wfc[n1] * grad_ae_wfc[n2]
+                                -
+                                (l2+1) * self.paw_ae_wfc[n1] * self.paw_ae_wfc[n2] / rr
+                        )
+                        R1_ps = self.radial_simp_int(
+                                self.paw_ps_wfc[n1] * grad_ps_wfc[n2]
+                                -
+                                (l2+1) * self.paw_ps_wfc[n1] * self.paw_ps_wfc[n2] / rr
+                        )
+
+                        R2_ae = self.radial_simp_int(
+                            self.paw_ae_wfc[n1] * self.paw_ae_wfc[n2] / rr
+                        )
+                        R2_ps = self.radial_simp_int(
+                            self.paw_ps_wfc[n1] * self.paw_ps_wfc[n2] / rr
+                        )
+
+                        R1 = R1_ae - R1_ps
+                        R2 = R2_ae - R2_ps
+
+                        self.paw_nablaij[:,ii, jj] = R1 * A1 + R2 * A2
+                        self.paw_nablaij[:,jj, ii] = -self.paw_nablaij[:,ii,jj]
+            else:
+                from pysbt import sbt, GauntTable
+
+                self.paw_nablaij = np.zeros((3, self.lmmax, self.lmmax))
+                ss = sbt(self.rgrid, kmax=kmax)
+
+                paw_ae_wfcq = []
+                paw_ps_wfcq = []
+                for ii, l in enumerate(self.proj_l):
+                    R1 = self.paw_ae_wfc[ii]
+                    R2 = self.paw_ps_wfc[ii]
+
+                    G1 = ss.run(R1 / self.rgrid, l=l, norm=True)
+                    G2 = ss.run(R2 / self.rgrid, l=l, norm=True)
+
+                    paw_ae_wfcq.append(G1)
+                    paw_ps_wfcq.append(G2)
+
+                for ii in range(self.lmmax):
+                    for jj in range(ii):
+                        n1, l1, m1 = self.ilm[ii]
+                        n2, l2, m2 = self.ilm[jj]
+                        # xyz component of the angular port
+                        nabla_ij_a  = np.sqrt(4 * np.pi / 3.) * np.array([
+                            GauntTable(l1, l2, 1, m1, m2, m) for m in [1, -1, 0]
+                        ]) 
+
+                        if np.allclose(nabla_ij_a, 0):
+                            continue
+
+                        # radial part
+                        nabla_ij_r = np.sum(
+                            ss.simp_wht_kk * ss.kk**3 *
+                            ((paw_ae_wfcq[n1] * paw_ae_wfcq[n2]) -
+                             (paw_ps_wfcq[n1] * paw_ps_wfcq[n2]))
+                        )
+
+                        phase = (-1j)**(l2-l1-1)
+                        self.paw_nablaij[:,ii,jj] =  phase.real * nabla_ij_r * nabla_ij_a
+                        self.paw_nablaij[:,jj,ii] = -self.paw_nablaij[:,ii,jj]
 
         return self.paw_nablaij
 
