@@ -34,14 +34,18 @@ class vasp_ae_wfc(object):
         '''
         '''
 
+        if wavecar._lsoc:
+            raise NotImplementedError('Non-collinear version currently not supported!')
+
         # wavecar storing the pseudo-wavefunctions
         self._pswfc = wavecar
+
         # energy cut for the pseudo-wavefunction
         self._pscut = wavecar._encut
         # the k-point vectors in fractional coordinates
         self._ikpt = ikpt
         self._kvec = self._pswfc._kvecs[ikpt - 1]
-        
+
         # the poscar storing the atoms information
         self._atoms  = read(poscar)
         self._natoms = len(self._atoms)
@@ -57,15 +61,17 @@ class vasp_ae_wfc(object):
         self._element_idx = [self._elements.index(s) for s in
                              self._atoms.get_chemical_symbols()]
 
+        self._pawpp = [pawpotcar(potstr) for potstr in
+                      open(potcar).read().split('End of Dataset')[:-1]]
+
         self._q_proj = nonlq(
             self._atoms,
             self._pscut,
-            potcar,
+            self._pawpp,
             k=self._kvec,
             lgam=self._pswfc._lgam,
             gamma_half=self._pswfc._gam_half,
         )
-        self._pawpp  = self._q_proj.pawpp
 
         assert len(self._elem_cnts) == len(self._pawpp), \
             "The kind of elements in POTCAR and POSCAR does not match!"
@@ -219,7 +225,7 @@ class vasp_ae_wfc(object):
     def get_ae_norm(self, ispin: int=1, iband: int=1):
         '''
         '''
-        
+
         Cg = self._pswfc.readBandCoeff(ispin, self._ikpt, iband, norm=False)
         beta_njk = self.get_beta_njk(Cg)
 
@@ -229,7 +235,7 @@ class vasp_ae_wfc(object):
                   )
 
         return ae_norm.real
-    
+
     def get_ae_wfc(self,
             iband: int=1,
             ispin: int=1,
@@ -269,7 +275,7 @@ class vasp_ae_wfc(object):
         if lcore:
             core_ae_wfc = np.zeros(self._aegrid, dtype=complex)
             core_ps_wfc = np.zeros(self._aegrid, dtype=complex)
-        
+
         g1 = self._ps_gv % self._aegrid[None,:]
         g2 = self._ae_gv % self._aegrid[None,:]
 
@@ -308,6 +314,186 @@ class vasp_ae_wfc(object):
             else:
                 return ifftn(phi_ae) * fac
 
+
+    def get_dipole_mat(self, ks_i, ks_j):
+        '''
+        Dipole transition within the electric dipole approximation (EDA).
+        Please refer to this post for more details.
+
+          https://qijingzheng.github.io/posts/Light-Matter-Interaction-and-Dipole-Transition-Matrix/
+
+        The dipole transition matrix elements in the length gauge is given by:
+
+                <psi_nk | e r | psi_mk>
+
+        In periodic systems, the position operator "r" is not well-defined.
+        Therefore, we first evaluate the momentum operator matrix in the velocity
+        gauge, i.e.
+
+                <psi_nk | p | psi_mk>
+
+        And then use simple "p-r" relation to apprimate the dipole transition
+        matrix element
+
+                                           i⋅h
+            <psi_nk | r | psi_mk> =  -------------- ⋅ <psi_nk | p | psi_mk>
+                                       m⋅(Em - En)
+
+        Apparently, the above equaiton is not valid for the case Em == En. In
+        this case, we just set the dipole matrix element to be 0.
+
+        ################################################################################
+        NOTE that, the simple "p-r" relation only applies to molecular or finite
+        system, and there might be problem in directly using it for periodic
+        system. Please refer to this paper for more details.
+
+          "Relation between the interband dipole and momentum matrix elements in
+          semiconductors"
+          (https://journals.aps.org/prb/pdf/10.1103/PhysRevB.87.125301)
+
+        ################################################################################
+        '''
+
+        # ks_i and ks_j are list containing spin-, kpoint- and band-index of the
+        # initial and final states
+        assert len(ks_i) == len(ks_j) == 3, 'Must be three indexes!'
+        assert ks_i[1] == ks_j[1], 'k-point of the two states differ!'
+        self._pswfc.checkIndex(*ks_i)
+        self._pswfc.checkIndex(*ks_j)
+
+        # energy differences between the two states
+        Emk = self._pswfc._bands[ks_i[0]-1, ks_i[1]-1, ks_i[2]-1]
+        Enk = self._pswfc._bands[ks_j[0]-1, ks_j[1]-1, ks_j[2]-1]
+        dE = Emk - Enk
+
+        # if energies of the initial and final states are the same, set the
+        # dipole transition moment zero.
+        if np.allclose(dE, 0.0):
+            return 0.0
+
+        moment_mat = self.get_moment_mat(ks_i, ks_j)
+        dipole_mat = 1j / (dE / (2*RYTOEV)) * moment_mat * AUTOA * AUTDEBYE
+
+        return Emk, Enk, dE, dipole_mat
+
+    def get_moment_mat(self, ks_i, ks_j):
+        '''
+        The momentum operator matrix in the velocity gauge
+
+                <psi_nk | p | psi_mk> = hbar <u_nk | k - i nabla | u_mk>
+
+        In PAW, the matrix element can be divided into plane-wave parts and
+        one-center parts, i.e.
+
+            <u_nk | k - i nabla | u_mk> = <tilde_u_nk | k - i nabla | tilde_u_mk>
+                                         - \sum_ij <tilde_u_nk | p_i><p_j | tilde_u_mk>
+                                           \times i [
+                                             <phi_i | nabla | phi_j>
+                                             -
+                                             <tilde_phi_i | nabla | tilde_phi_j>
+                                           ]
+
+        where | u_nk > and | tilde_u_nk > are cell-periodic part of the AE/PS
+        wavefunctions, | p_j > is the PAW projector function and | phi_j > and
+        | tilde_phi_j > are PAW AE/PS partial waves.
+
+        The nabla operator matrix elements between the pseudo-wavefuncitons
+
+            <tilde_u_nk | k - i nabla | tilde_u_mk>
+
+           = \sum_G C_nk(G).conj() * C_mk(G) * [k + G]
+
+        where C_nk(G) is the plane-wave coefficients for | u_nk >.
+
+        '''
+
+        # ks_i and ks_j are list containing spin-, kpoint- and band-index of the
+        # initial and final states
+        assert len(ks_i) == len(ks_j) == 3, 'Must be three indexes!'
+        assert ks_i[1] == ks_j[1], 'k-point of the two states differ!'
+        self._pswfc.checkIndex(*ks_i)
+        self._pswfc.checkIndex(*ks_j)
+
+        # k-points in direct coordinate
+        k0 = self._pswfc._kvecs[ks_i[1] - 1]
+        # plane-waves in direct coordinates
+        G0 = self._pswfc.gvectors(ikpts=ks_i[1])
+        # G + k in Cartesian coordinates
+        Gk = np.dot(
+            G0 + k0,                            # G in direct coordinates
+            self._pswfc._Bcell * TPI            # reciprocal basis x 2pi
+        )
+
+        # plane-wave coefficients for initial (mk) and final (nk) states
+        CG_mk = self._pswfc.readBandCoeff(*ks_i)
+        CG_nk = self._pswfc.readBandCoeff(*ks_j)
+        ovlap = CG_nk.conj() * CG_mk
+
+        ################################################################################
+        # Momentum operator matrix element between pseudo-wavefunctions
+        ################################################################################
+        if self._pswfc._lgam:
+            # for gamma-only, only half the plane-wave coefficients are stored.
+            # Moreover, the coefficients are multiplied by a factor of sqrt2
+
+            # G > 0 part
+            moment_mat_ps = np.sum(ovlap[:,None] * Gk, axis=0)
+
+            # For gamma-only version, add the other half plane-waves, G_ = -G
+            # G < 0 part, C(G) = C(-G).conj()
+            Gk_ = np.dot(
+                k0 - G0,                        # G in direct coordinates
+                self._pswfc._Bcell * TPI        # reciprocal basis x 2pi
+            )
+            moment_mat_ps += np.sum(
+                    ovlap[:,None].conj() * Gk_,
+                    axis=0)
+
+            # remove the sqrt2 factor added by VASP
+            moment_mat_ps /= 2.0
+        elif self._pswfc._lsoc:
+            raise NotImplementedError('Non-collinear version currently not supported!')
+        else:
+            moment_mat_ps = np.sum(
+                ovlap[:,None] * Gk, axis=0
+            )
+
+        ################################################################################
+        # One-center correction
+        ################################################################################
+
+        projector = nonlq(
+            self._atoms,
+            self._pscut,
+            self._pawpp,
+            k=k0,
+            lgam=self._pswfc._lgam,
+            gamma_half=self._pswfc._gam_half,
+        )
+
+        beta_mk = projector.proj(CG_mk)
+        beta_nk = projector.proj(CG_nk)
+
+        # one-center term of momentum operator matrix element
+        moment_mat_oc = np.zeros(3, dtype=complex)
+        nproj = 0
+        for ii in range(self._natoms):
+            itype = self._element_idx[ii]
+            lmmax = self._pawpp[itype].lmmax
+            nabla = self._pawpp[itype].get_nablaij(lreal=True)
+
+            moment_mat_oc += np.dot(
+                beta_nk[nproj:nproj+lmmax].conj(),
+                np.dot(nabla, beta_mk[nproj:nproj+lmmax]).T
+            )
+
+            nproj += lmmax
+
+        return  moment_mat_ps - 1j*moment_mat_oc
+
+
+
+################################################################################
 if __name__ == "__main__":
     pass
     # import matplotlib.pyplot as plt
