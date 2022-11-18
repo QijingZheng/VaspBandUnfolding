@@ -870,12 +870,8 @@ class vaspwfc(object):
 
             # For gamma-only version, add the other half plane-waves, G_ = -G
             # G < 0 part, C(G) = C(-G).conj()
-            Gk_ = np.dot(
-                k0 - G0,                        # G in direct coordinates
-                self._Bcell * TPI        # reciprocal basis x 2pi
-            )
-            moment_mat_ps += np.sum(
-                    ovlap[:,None].conj() * Gk_,
+            moment_mat_ps -= np.sum(
+                    ovlap[:,None].conj() * Gk,
                     axis=0)
 
             # remove the sqrt2 factor added by VASP
