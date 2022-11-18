@@ -661,8 +661,18 @@ class nonlr(object):
         self.natoms = len(atoms)
         self.encut = encut
         self.kvec = np.asarray(k, dtype=float)
-        self.pawpp = [pawpotcar(potstr) for potstr in
-                      open(potcar).read().split('End of Dataset')[:-1]]
+
+        if isinstance(potcar, str):
+            self.pawpp = [pawpotcar(potstr) for potstr in
+                          open(potcar).read().split('End of Dataset')[:-1]]
+        elif isinstance(potcar, list):
+            assert np.alltrue([
+                isinstance(pp, pawpotcar) for pp in potcar
+            ])
+            self.pawpp = potcar
+        else:
+            raise ValueError('Argument potcar must be a string or list of pawpotcar type!')
+
         elements, elem_first_idx, elem_cnts = np.unique(atoms.get_chemical_symbols(),
                                                         return_index=True,
                                                         return_counts=True)
@@ -863,8 +873,18 @@ class nonlq(object):
 
         self.atoms = atoms
         self.natoms = len(atoms)
-        self.pawpp = [pawpotcar(potstr) for potstr in
-                      open(potcar).read().split('End of Dataset')[:-1]]
+
+        if isinstance(potcar, str):
+            self.pawpp = [pawpotcar(potstr) for potstr in
+                          open(potcar).read().split('End of Dataset')[:-1]]
+        elif isinstance(potcar, list):
+            assert np.alltrue([
+                isinstance(pp, pawpotcar) for pp in potcar
+            ])
+            self.pawpp = potcar
+        else:
+            raise ValueError('Argument potcar must be a string or list of pawpotcar type!')
+
         elements, elem_first_idx, elem_cnts = np.unique(atoms.get_chemical_symbols(),
                                                         return_index=True,
                                                         return_counts=True)
