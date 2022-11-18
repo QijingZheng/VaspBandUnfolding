@@ -97,10 +97,10 @@ def vasptdm(wfc, ibands, jbands, ispin=1, ikpt=1):
     E_i = wfc._bands[ispin-1, ikpt-1, ibands-1]
     E_j = wfc._bands[ispin-1, ikpt-1, jbands-1]
     Ex, Ey = np.meshgrid(E_i, E_j, indexing='ij')
-    dE = Ey - Ex
+    dE = Ex - Ey
 
-    k0   = wfc._kvecs[ikpt - 1]
-    gvec = np.dot(wfc.gvectors(ikpt=ikpt) + k0, wfc._Bcell*TPI)
+    k0 = wfc._kvecs[ikpt - 1]
+    Gk = np.dot(wfc.gvectors(ikpt=ikpt) + k0, wfc._Bcell*TPI)
     Cg_i = np.array([
         wfc.readBandCoeff(ispin=ispin, ikpt=ikpt, iband=ii)
         for ii in ibands
@@ -111,23 +111,23 @@ def vasptdm(wfc, ibands, jbands, ispin=1, ikpt=1):
     ])
 
     if wfc._lsoc:
-        nplw = gvec.shape[0]
+        nplw = Gk.shape[0]
         TDM  = np.array([
-            np.dot(Cg_i[:, :nplw] * gvec[:, ii], Cg_j[:, :nplw].T.conj()) +
-            np.dot(Cg_i[:, nplw:] * gvec[:, ii], Cg_j[:, nplw:].T.conj())
+            np.dot(Cg_i[:, :nplw] * Gk[:, ii], Cg_j[:, :nplw].T.conj()) +
+            np.dot(Cg_i[:, nplw:] * Gk[:, ii], Cg_j[:, nplw:].T.conj())
             for ii in range(3)
         ])
     elif wfc._lgam:
         TDM = np.array([
             (
-                np.dot(Cg_i * gvec[:, ii], Cg_j.T.conj()) -
-                np.dot(Cg_i.conj() * gvec[:, ii], Cg_j.T)
+                np.dot(Cg_i * Gk[:, ii], Cg_j.T.conj()) -
+                np.dot(Cg_i.conj() * Gk[:, ii], Cg_j.T)
             ) / 2.
             for ii in range(3)
         ])
     else:
         TDM = np.array([
-            np.dot(Cg_i * gvec[:, ii], Cg_j.T.conj())
+            np.dot(Cg_i * Gk[:, ii], Cg_j.T.conj())
             for ii in range(3)
         ])
 

@@ -779,9 +779,9 @@ class vaspwfc(object):
         And then use simple "p-r" relation to apprimate the dipole transition
         matrix element
 
-                                           i⋅h
+                                          -i⋅h
             <psi_nk | r | psi_mk> =  -------------- ⋅ <psi_nk | p | psi_mk>
-                                       m⋅(Em - En)
+                                       m⋅(En - Em)
 
         Apparently, the above equaiton is not valid for the case Em == En. In
         this case, we just set the dipole matrix element to be 0.
@@ -808,7 +808,7 @@ class vaspwfc(object):
         # energy differences between the two states
         Emk = self._bands[ks_i[0]-1, ks_i[1]-1, ks_i[2]-1]
         Enk = self._bands[ks_j[0]-1, ks_j[1]-1, ks_j[2]-1]
-        dE = Emk - Enk
+        dE = Enk - Emk
 
         # if energies of the initial and final states are the same, set the
         # dipole transition moment zero.
@@ -816,7 +816,7 @@ class vaspwfc(object):
             return 0.0
 
         moment_mat = self.get_moment_mat(ks_i, ks_j)
-        dipole_mat = 1j / (dE / (2*RYTOEV)) * moment_mat * AUTOA * AUTDEBYE
+        dipole_mat = -1j / (dE / (2*RYTOEV)) * moment_mat * AUTOA * AUTDEBYE
 
         return Emk, Enk, dE, dipole_mat
 
