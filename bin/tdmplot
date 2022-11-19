@@ -1,12 +1,80 @@
 #!/usr/bin/env python
 
+import re, sys, argparse
+
 import numpy as np
-import re
-import sys
-import argparse
+from ase.io import read
+from scipy.sparse import block_diag
+
 from vaspwfc import vaspwfc
 from vasp_constant import *
+from paw import pawpotcar, nonlq
 
+
+'''
+Dipole transition within the electric dipole approximation (EDA).  Please refer
+to this post for more details.
+
+  https://qijingzheng.github.io/posts/Light-Matter-Interaction-and-Dipole-Transition-Matrix/
+
+The dipole transition matrix elements in the length gauge is given by:
+
+        <psi_nk | e r | psi_mk>
+
+where | psi_nk > is the pseudo-wavefunction.  In periodic systems, the position
+operator "r" is not well-defined.  Therefore, we first evaluate the momentum
+operator matrix in the velocity gauge, i.e.
+
+        <psi_nk | p | psi_mk>
+
+And then use simple "p-r" relation to apprimate the dipole transition matrix
+element
+
+                                  -i⋅h
+    <psi_nk | r | psi_mk> =  -------------- ⋅ <psi_nk | p | psi_mk>
+                               m⋅(En - Em)
+
+Apparently, the above equaiton is not valid for the case Em == En. In this case,
+we just set the dipole matrix element to be 0.
+
+################################################################################
+NOTE that, the simple "p-r" relation only applies to molecular or finite system,
+and there might be problem in directly using it for periodic system. Please
+refer to this paper for more details.
+
+  "Relation between the interband dipole and momentum matrix elements in
+  semiconductors"
+  (https://journals.aps.org/prb/pdf/10.1103/PhysRevB.87.125301)
+
+################################################################################
+
+The momentum operator matrix in the velocity gauge
+
+        <psi_nk | p | psi_mk> = hbar <u_nk | k - i nabla | u_mk>
+
+In PAW, the matrix element can be divided into plane-wave parts and one-center
+parts, i.e.
+
+    <u_nk | k - i nabla | u_mk> = <tilde_u_nk | k - i nabla | tilde_u_mk>
+                                 - \sum_ij <tilde_u_nk | p_i><p_j | tilde_u_mk>
+                                   \times i [
+                                     <phi_i | nabla | phi_j>
+                                     -
+                                     <tilde_phi_i | nabla | tilde_phi_j>
+                                   ]
+
+where | u_nk > and | tilde_u_nk > are cell-periodic part of the AE/PS
+wavefunctions, | p_j > is the PAW projector function and | phi_j > and
+| tilde_phi_j > are PAW AE/PS partial waves.
+
+The nabla operator matrix elements between the pseudo-wavefuncitons
+
+    <tilde_u_nk | k - i nabla | tilde_u_mk>
+
+   = \sum_G C_nk(G).conj() * C_mk(G) * [k + G]
+
+where C_nk(G) is the plane-wave coefficients for | u_nk >.
+'''
 
 def parse_band_idx(band_str_lst):
     '''
@@ -41,6 +109,14 @@ def parse_cml_args(cml):
                      default='WAVECAR',
                      help='Location of the WAVECAR')
 
+    arg.add_argument('-p', '--poscar', dest='poscar', action='store', type=str,
+                     default='POSCAR',
+                     help='Location of the POSCAR')
+
+    arg.add_argument('--potcar', dest='potcar', action='store', type=str,
+                     default='POTCAR',
+                     help='Location of the POTCAR')
+
     arg.add_argument('-s', dest='ispin', action='store', type=int,
                      default=1,
                      help='the spin index, starting from 1')
@@ -64,6 +140,9 @@ def parse_cml_args(cml):
                      type=str, default='x', choices=['x', 'z'],
                      help='GAMMA half in x/z direction')
 
+    arg.add_argument('--lpseudo', dest='lpseudo', action='store_true',
+                     help='Dipole matrix from pseudo-wavefunctions')
+
     arg.add_argument('--lsorbit', dest='lsorbit', action='store_true',
                      help='WAVECAR from NONCOLLINEAR VASP')
 
@@ -85,62 +164,97 @@ def parse_cml_args(cml):
     return arg.parse_args(cml)
 
 
-def vasptdm(wfc, ibands, jbands, ispin=1, ikpt=1):
+def get_dipole_mat(
+        pswfc, ibands, jbands, ispin=1, ikpt=1,
+        lae=True,
+        projector=None,
+    ):
     '''
+    Get the dipole transition matrix using the "p-r" relation.
     '''
 
+    if lae:
+        assert (projector is not None) and isinstance(projector, nonlq)
+        if pswfc._lsoc:
+            raise NotImplementedError('Non-collinear WAVECAR not supported!')
+
+
+    # initial states
     ibands = np.asarray(ibands, dtype=int)
+    # final states
     jbands = np.asarray(jbands, dtype=int)
     assert jbands.min() > ibands.max()
-    nx, ny = np.meshgrid(ibands, jbands, indexing='ij')
+    nx, ny = np.meshgrid(ibands, jbands)
 
-    E_i = wfc._bands[ispin-1, ikpt-1, ibands-1]
-    E_j = wfc._bands[ispin-1, ikpt-1, jbands-1]
-    Ex, Ey = np.meshgrid(E_i, E_j, indexing='ij')
-    dE = Ex - Ey
+    E_i = pswfc._bands[ispin-1, ikpt-1, ibands-1]
+    E_j = pswfc._bands[ispin-1, ikpt-1, jbands-1]
+    Ex, Ey = np.meshgrid(E_i, E_j)
+    dE = Ey - Ex
 
-    k0 = wfc._kvecs[ikpt - 1]
-    Gk = np.dot(wfc.gvectors(ikpt=ikpt) + k0, wfc._Bcell*TPI)
+    k0 = pswfc._kvecs[ikpt - 1]
+    Gk = np.dot(pswfc.gvectors(ikpt=ikpt) + k0, pswfc._Bcell*TPI)
     Cg_i = np.array([
-        wfc.readBandCoeff(ispin=ispin, ikpt=ikpt, iband=ii)
+        pswfc.readBandCoeff(ispin=ispin, ikpt=ikpt, iband=ii)
         for ii in ibands
     ])
     Cg_j = np.array([
-        wfc.readBandCoeff(ispin=ispin, ikpt=ikpt, iband=jj)
+        pswfc.readBandCoeff(ispin=ispin, ikpt=ikpt, iband=jj)
         for jj in jbands
     ])
 
-    if wfc._lsoc:
+    if pswfc._lsoc:
         nplw = Gk.shape[0]
-        TDM  = np.array([
-            np.dot(Cg_i[:, :nplw] * Gk[:, ii], Cg_j[:, :nplw].T.conj()) +
-            np.dot(Cg_i[:, nplw:] * Gk[:, ii], Cg_j[:, nplw:].T.conj())
+        dp_mat  = np.array([
+            Cg_j[:,:nplw].conj() @ (Cg_i[:,:nplw] * Gk[:,ii]).T
+            +
+            Cg_j[:,nplw:].conj() @ (Cg_i[:,nplw:] * Gk[:,ii]).T
             for ii in range(3)
         ])
-    elif wfc._lgam:
-        TDM = np.array([
+    elif pswfc._lgam:
+        dp_mat = np.array([
             (
-                np.dot(Cg_i * Gk[:, ii], Cg_j.T.conj()) -
-                np.dot(Cg_i.conj() * Gk[:, ii], Cg_j.T)
+                # np.dot(Cg_i * Gk[:, ii], Cg_j.T.conj()) -
+                # np.dot(Cg_i.conj() * Gk[:, ii], Cg_j.T)
+                Cg_j.conj() @ (Cg_i * Gk[:, ii]).T
+                -
+                Cg_j @ (Cg_i.conj() * Gk[:, ii]).T
             ) / 2.
             for ii in range(3)
         ])
     else:
-        TDM = np.array([
-            np.dot(Cg_i * Gk[:, ii], Cg_j.T.conj())
+        dp_mat = np.array([
+            # np.dot(Cg_i * Gk[:, ii], Cg_j.T.conj())
+            Cg_j.conj() @ (Cg_i * Gk[:, ii]).T
             for ii in range(3)
         ])
 
-    TDM = 1j / (dE / (2*RYTOEV)) * TDM * AUTOA * AUTDEBYE
-    # dump = np.vstack([
-    #     nx, ny, Ex, Ey, dE, TDM[0], TDM[1], TDM[2]
-    # ]).reshape((8, -1)).T
+    if lae:
+        # one-center correction
+        beta_i = np.array(
+            [projector.proj(Cg) for Cg in Cg_i]
+        )
+        beta_j = np.array(
+            [projector.proj(Cg) for Cg in Cg_j]
+        )
+        nablaij = [
+            block_diag([
+                projector.pawpp[projector.element_idx[iatom]].get_nablaij()[ii]
+                for iatom in range(projector.natoms)
+            ])
+            for ii in range(3)
+        ]
+
+        for ii in range(3):
+            dp_mat[ii] += -1j*(beta_j.conj() @ (nablaij[ii] @ beta_i.T))
+
+    dp_mat = -1j / (dE / (2*RYTOEV)) * dp_mat * AUTOA * AUTDEBYE
+
     dump = [
         nx.flatten(), ny.flatten(),
         Ex.flatten(), Ey.flatten(), dE.flatten(),
-        TDM[0].flatten(),
-        TDM[1].flatten(),
-        TDM[2].flatten()
+        dp_mat[0].flatten(),
+        dp_mat[1].flatten(),
+        dp_mat[2].flatten()
     ]
 
     return dump
@@ -195,20 +309,44 @@ def showtdm(tdm, p):
 def main(cml):
     p = parse_cml_args(cml)
 
-    wfc = vaspwfc(p.wavecar,
+    pswfc = vaspwfc(p.wavecar,
                   lsorbit=p.lsorbit, lgamma=p.lgamma,
                   gamma_half=p.gamma_half)
     ibands = parse_band_idx(p.ibands)
     jbands = parse_band_idx(p.jbands)
 
-    tdm = vasptdm(wfc, ibands, jbands, ikpt=p.ikpt, ispin=p.ispin)
+    # dipole matrix elements from AE or PS wavefucntions
+    lae = not p.lpseudo
 
-    header = ('{:5s} {:5s}' + ' {:>8s}' * 6).format(
+    # If all-electron dipole matrix elements are needed, must also provide the
+    # projector function
+    projector = None
+    if lae:
+        pawpp = [pawpotcar(potstr) for potstr in
+                 open(p.potcar).read().split('End of Dataset')[:-1]]
+        projector = nonlq(
+            read(p.poscar),
+            pswfc._encut,
+            pawpp,
+            k=pswfc._kvecs[p.ikpt-1],
+            lgam=pswfc._lgam,
+            gamma_half=pswfc._gam_half,
+        )
+
+    dp_mat = get_dipole_mat(
+        pswfc, ibands, jbands,
+        ikpt=p.ikpt, ispin=p.ispin,
+        lae=lae, projector=projector
+    )
+
+    header = ('{:5s} {:5s}' + ' {:>12s}' * 6).format(
         "iband", "jband", "E_i", "E_j", "dE", "Tx", "Ty", "Tz")
-    np.savetxt('TDM.dat', np.abs(tdm).T,
+    
+    tmp = np.r_[dp_mat[:5], np.abs(dp_mat[-3:])]
+    np.savetxt('TDM.dat', tmp.T,
                header=header,
-               fmt='  %5d %5d' + ' %8.4f' * 6)
-    showtdm(tdm[-4:], p)
+               fmt='  %5d %5d' + ' %12.6f' * 6)
+    showtdm(dp_mat[-4:], p)
 
 
 if __name__ == "__main__":
