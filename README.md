@@ -243,7 +243,7 @@
   # (ispin, ikpt, iband) for initial and final states
   ps_dp_mat = ps_wfc.get_dipole_mat((1,1,1), (1, 1, 9))
   ae_dp_mat = ae_wfc.get_dipole_mat((1,1,1), (1, 1, 9))
-  ```python
+  ```
    
 
 - Inverse Participation Ratio
