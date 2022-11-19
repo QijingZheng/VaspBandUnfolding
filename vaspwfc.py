@@ -846,7 +846,7 @@ class vaspwfc(object):
         # k-points in direct coordinate
         k0 = self._kvecs[ks_i[1] - 1]
         # plane-waves in direct coordinates
-        G0 = self.gvectors(ikpts=ks_i[1])
+        G0 = self.gvectors(ikpt=ks_i[1])
         # G + k in Cartesian coordinates
         Gk = np.dot(
             G0 + k0,                            # G in direct coordinates
