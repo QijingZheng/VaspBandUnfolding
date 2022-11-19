@@ -156,6 +156,96 @@
   ![CO2 HOMO](./examples/aewfc/co2/ae-ps-core_co2_homo_wfc.png)
   ![CO2 HOMO](./examples/aewfc/co2/co2_homo_aeps_wfc_rs.png)
 
+- Dipole transition matrix
+
+  Refer to this post for detail formulation.
+
+  > [Light-Matter Interaction and Dipole Transition Matrix](https://qijingzheng.github.io/posts/Light-Matter-Interaction-and-Dipole-Transition-Matrix/)
+
+  Under the electric-dipole approximation (EDA), The dipole transition matrix
+  elements in the length gauge is given by:
+
+  ```
+        <psi_nk | e r | psi_mk>
+  ```
+
+  where | psi_nk > is the pseudo-wavefunction.  In periodic systems, the position
+  operator "r" is not well-defined.  Therefore, we first evaluate the momentum
+  operator matrix in the velocity gauge, i.e.
+  
+  ```
+        <psi_nk | p | psi_mk>
+  ```
+  
+  And then use simple "p-r" relation to apprimate the dipole transition matrix
+  element
+  
+  ```
+                                    -i⋅h
+      <psi_nk | r | psi_mk> =  -------------- ⋅ <psi_nk | p | psi_mk>
+                                 m⋅(En - Em)
+  ```
+  
+  Apparently, the above equaiton is not valid for the case Em == En. In this case,
+  we just set the dipole matrix element to be 0.
+  
+  > NOTE that, the simple "p-r" relation only applies to molecular or finite system,
+  > and there might be problem in directly using it for periodic system. Please
+  > refer to this paper for more details.
+  >
+  > [Relation between the interband dipole and momentum matrix elements in semiconductors](https://journals.aps.org/prb/pdf/10.1103/PhysRevB.87.125301)
+  
+  
+  The momentum operator matrix in the velocity gauge
+  
+  ```
+          <psi_nk | p | psi_mk> = hbar <u_nk | k - i nabla | u_mk>
+  ```
+  
+  In PAW, the matrix element can be divided into plane-wave parts and one-center
+  parts, i.e.
+  
+  ```
+      <u_nk | k - i nabla | u_mk> = <tilde_u_nk | k - i nabla | tilde_u_mk>
+                                   - \sum_ij <tilde_u_nk | p_i><p_j | tilde_u_mk>
+                                     \times i [
+                                       <phi_i | nabla | phi_j>
+                                       -
+                                       <tilde_phi_i | nabla | tilde_phi_j>
+                                     ]
+  ```
+  
+  where | u_nk > and | tilde_u_nk > are cell-periodic part of the AE/PS
+  wavefunctions, | p_j > is the PAW projector function and | phi_j > and
+  | tilde_phi_j > are PAW AE/PS partial waves.
+  
+  The nabla operator matrix elements between the pseudo-wavefuncitons
+  
+  ```
+      <tilde_u_nk | k - i nabla | tilde_u_mk>
+  
+     = \sum_G C_nk(G).conj() * C_mk(G) * [k + G]
+  ```
+  
+  where C_nk(G) is the plane-wave coefficients for | u_nk >.
+
+  ```python
+  import numpy as np
+  
+  from vaspwfc import vaspwfc
+  from aewfc import vasp_ae_wfc
+  
+  # the pseudo-wavefunction
+  ps_wfc = vaspwfc('WAVECAR', lgamma=True)
+  # the all-electron wavefunction
+  ae_wfc = vasp_ae_wfc(ps_wfc)
+  
+  # (ispin, ikpt, iband) for initial and final states
+  ps_dp_mat = ps_wfc.get_dipole_mat((1,1,1), (1, 1, 9))
+  ae_dp_mat = ae_wfc.get_dipole_mat((1,1,1), (1, 1, 9))
+  ```python
+   
+
 - Inverse Participation Ratio
 
   IPR is a measure of the localization of Kohn-Sham states. For a particular KS state \phi_j, it is defined as
