@@ -14,7 +14,7 @@ from paw import nonlq, pawpotcar, gvectors
 
 from ase.io import read
 from scipy.fft import ifftn, fftn
-from scipy.linalg import block_diag
+from scipy.sparse import block_diag
 
 class vasp_ae_wfc(object):
     '''
@@ -217,7 +217,7 @@ class vasp_ae_wfc(object):
 
 
         # Q_{ij} = < \phi_i^{AE} | \phi_j^{AE} > - < phi_i^{PS} | phi_j^{PS} >
-        self._qij = block_diag(*[
+        self._qij = block_diag([
             self._pawpp[self._element_idx[iatom]].get_Qij()
             for iatom in range(self._natoms)
         ])
@@ -229,10 +229,7 @@ class vasp_ae_wfc(object):
         Cg = self._pswfc.readBandCoeff(ispin, self._ikpt, iband, norm=False)
         beta_njk = self.get_beta_njk(Cg)
 
-        ae_norm = (Cg.conj() * Cg).sum() + \
-                  np.dot(
-                      np.dot(beta_njk, self._qij), beta_njk
-                  )
+        ae_norm = np.sum(Cg.conj() * Cg) + beta_njk.conj() @ (self._qij @ beta_njk)
 
         return ae_norm.real
 
@@ -448,7 +445,10 @@ class vasp_ae_wfc(object):
             # remove the sqrt2 factor added by VASP
             moment_mat_ps /= 2.0
         elif self._pswfc._lsoc:
-            raise NotImplementedError('Non-collinear version currently not supported!')
+            moment_mat_ps = np.sum(
+                ovlap[:, None] * np.r_[Gk, Gk],
+                axis=0)
+            # raise NotImplementedError('Non-collinear version currently not supported!')
         else:
             moment_mat_ps = np.sum(
                 ovlap[:,None] * Gk, axis=0
@@ -467,23 +467,52 @@ class vasp_ae_wfc(object):
             gamma_half=self._pswfc._gam_half,
         )
 
-        beta_mk = projector.proj(CG_mk)
-        beta_nk = projector.proj(CG_nk)
+        if self._pswfc._lsoc:
+            nplw = Gk.shape[0]
+            # spin-up component of the spinor
+            beta_mk  = projector.proj(CG_mk[:nplw])
+            beta_nk  = projector.proj(CG_nk[:nplw])
+            
+            # spin-down component of the spinor
+            beta_mk2 = projector.proj(CG_mk[nplw:])
+            beta_nk2 = projector.proj(CG_nk[nplw:])
+        else:
+            beta_mk = projector.proj(CG_mk)
+            beta_nk = projector.proj(CG_nk)
 
         # one-center term of momentum operator matrix element
         moment_mat_oc = np.zeros(3, dtype=complex)
-        nproj = 0
-        for ii in range(self._natoms):
-            itype = self._element_idx[ii]
-            lmmax = self._pawpp[itype].lmmax
-            nabla = self._pawpp[itype].get_nablaij(lreal=True)
 
-            moment_mat_oc += np.dot(
-                beta_nk[nproj:nproj+lmmax].conj(),
-                np.dot(nabla, beta_mk[nproj:nproj+lmmax]).T
-            )
+        # nproj = 0
+        # for ii in range(self._natoms):
+        #     itype = self._element_idx[ii]
+        #     lmmax = self._pawpp[itype].lmmax
+        #     nabla = self._pawpp[itype].get_nablaij(lreal=True)
+        #
+        #     moment_mat_oc += np.dot(
+        #         beta_nk[nproj:nproj+lmmax].conj(),
+        #         np.dot(nabla, beta_mk[nproj:nproj+lmmax]).T
+        #     )
+        #     
+        #     if self._pswfc._lsoc:
+        #         moment_mat_oc += np.dot(
+        #             beta_nk2[nproj:nproj+lmmax].conj(),
+        #             np.dot(nabla, beta_mk2[nproj:nproj+lmmax]).T
+        #         )
+        #
+        #     nproj += lmmax
 
-            nproj += lmmax
+        nablaij = [
+            block_diag([
+                projector.pawpp[projector.element_idx[iatom]].get_nablaij()[ii]
+                for iatom in range(projector.natoms)
+            ])
+            for ii in range(3)
+        ]
+        for ii in range(3):
+            moment_mat_oc[ii] = beta_nk.conj() @ (nablaij[ii] @ beta_mk)
+            if self._pswfc._lsoc:
+                moment_mat_oc[ii] += beta_nk2.conj() @ (nablaij[ii] @ beta_mk2)
 
         return  moment_mat_ps - 1j*moment_mat_oc
 
