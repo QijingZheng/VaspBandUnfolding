@@ -247,7 +247,12 @@ def get_dipole_mat(
         for ii in range(3):
             dp_mat[ii] += -1j*(beta_j.conj() @ (nablaij[ii] @ beta_i.T))
 
-    dp_mat = -1j / (dE / (2*RYTOEV)) * dp_mat * AUTOA * AUTDEBYE
+    # if dE = 0, set dp_mat to zero
+    dp_mat = np.where(
+        np.isclose(dE, 0),
+        0,
+        -1j / (dE / (2*RYTOEV)) * dp_mat * AUTOA * AUTDEBYE
+    )
 
     dump = [
         nx.flatten(), ny.flatten(),
