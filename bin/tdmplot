@@ -175,9 +175,6 @@ def get_dipole_mat(
 
     if lae:
         assert (projector is not None) and isinstance(projector, nonlq)
-        if pswfc._lsoc:
-            raise NotImplementedError('Non-collinear WAVECAR not supported!')
-
 
     # initial states
     ibands = np.asarray(ibands, dtype=int)
@@ -202,8 +199,8 @@ def get_dipole_mat(
         for jj in jbands
     ])
 
+    nplw = Gk.shape[0]
     if pswfc._lsoc:
-        nplw = Gk.shape[0]
         dp_mat  = np.array([
             Cg_j[:,:nplw].conj() @ (Cg_i[:,:nplw] * Gk[:,ii]).T
             +
@@ -213,8 +210,6 @@ def get_dipole_mat(
     elif pswfc._lgam:
         dp_mat = np.array([
             (
-                # np.dot(Cg_i * Gk[:, ii], Cg_j.T.conj()) -
-                # np.dot(Cg_i.conj() * Gk[:, ii], Cg_j.T)
                 Cg_j.conj() @ (Cg_i * Gk[:, ii]).T
                 -
                 Cg_j @ (Cg_i.conj() * Gk[:, ii]).T
@@ -223,19 +218,11 @@ def get_dipole_mat(
         ])
     else:
         dp_mat = np.array([
-            # np.dot(Cg_i * Gk[:, ii], Cg_j.T.conj())
             Cg_j.conj() @ (Cg_i * Gk[:, ii]).T
             for ii in range(3)
         ])
 
     if lae:
-        # one-center correction
-        beta_i = np.array(
-            [projector.proj(Cg) for Cg in Cg_i]
-        )
-        beta_j = np.array(
-            [projector.proj(Cg) for Cg in Cg_j]
-        )
         nablaij = [
             block_diag([
                 projector.pawpp[projector.element_idx[iatom]].get_nablaij()[ii]
@@ -244,8 +231,35 @@ def get_dipole_mat(
             for ii in range(3)
         ]
 
+        # one-center correction
+        if pswfc._lsoc:
+            # spin-up part of the spinor
+            beta_i = np.array(
+                [projector.proj(Cg) for Cg in Cg_i[:,:nplw]]
+            )
+            beta_j = np.array(
+                [projector.proj(Cg) for Cg in Cg_j[:,:nplw]]
+            )
+
+            # spin-down part of the spinor
+            beta_i2 = np.array(
+                [projector.proj(Cg) for Cg in Cg_i[:,nplw:]]
+            )
+            beta_j2 = np.array(
+                [projector.proj(Cg) for Cg in Cg_j[:,nplw:]]
+            )
+        else:
+            beta_i = np.array(
+                [projector.proj(Cg) for Cg in Cg_i]
+            )
+            beta_j = np.array(
+                [projector.proj(Cg) for Cg in Cg_j]
+            )
+
         for ii in range(3):
             dp_mat[ii] += -1j*(beta_j.conj() @ (nablaij[ii] @ beta_i.T))
+            if pswfc._lsoc:
+                dp_mat[ii] += -1j*(beta_j2.conj() @ (nablaij[ii] @ beta_i2.T))
 
     # if dE = 0, set dp_mat to zero
     dp_mat = np.where(
