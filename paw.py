@@ -49,8 +49,7 @@ def fftchk(ngrid):
 
 
 def gvectors(cell, encut, kvec, ngrid=None,
-             lgam=False, gamma_half='x', force_gamma=False,
-             lsoc=False):
+             lgam=False, gamma_half='x', force_gamma=False):
     '''
     Generate the G-vectors that satisfies the following relation
         (G + k)**2 / 2 < ENCUT
@@ -854,7 +853,6 @@ class nonlq(object):
                  atoms, encut, potcar='POTCAR', k=[0.0, 0.0, 0.0],
                  lgam=False,
                  gamma_half='x',
-                 lsoc=False,
                  ):
         '''
         input:
