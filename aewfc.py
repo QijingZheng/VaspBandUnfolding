@@ -216,11 +216,41 @@ class vasp_ae_wfc(object):
             self._q_ps_core.append(t2)
 
 
-        # Q_{ij} = < \phi_i^{AE} | \phi_j^{AE} > - < phi_i^{PS} | phi_j^{PS} >
-        self._qij = block_diag([
-            self._pawpp[self._element_idx[iatom]].get_Qij()
-            for iatom in range(self._natoms)
-        ])
+    def get_qijs(self):
+        '''
+        Qij for all the atoms
+
+            Q_{ij} = < \phi_i^{AE} | \phi_j^{AE} > - < phi_i^{PS} | phi_j^{PS} >
+        
+        and stored in a scipy.sparse block diagonal matrix.
+        '''
+        if not hasattr(self, "_qijs"):
+            self._qijs = block_diag([
+                self._pawpp[self._element_idx[iatom]].get_Qij()
+                for iatom in range(self._natoms)
+            ])
+
+        return self._qijs
+
+    def get_nablaijs(self):
+        '''
+        Matrix elements of the gradient operator for all the atoms
+
+            nabla_{ij} = < \phi_i^{AE} | nabla_r | \phi_j^{AE} > -
+                         < \phi_i^{PS} | nabla_r | \phi_j^{PS} >
+        
+        and stored in a list of scipy.sparse block diagonal matrices.
+        '''
+        if not hasattr(self, "_nablaijs"):
+            self._nablaijs = [
+                block_diag([
+                    self._pawpp[self._element_idx[iatom]].get_nablaij()[ii]
+                    for iatom in range(self._natoms)
+                ])
+                for ii in range(3)
+            ]
+
+        return self._nablaijs
 
     def get_ae_norm(self, ispin: int=1, iband: int=1):
         '''
@@ -229,7 +259,7 @@ class vasp_ae_wfc(object):
         Cg = self._pswfc.readBandCoeff(ispin, self._ikpt, iband, norm=False)
         beta_njk = self.get_beta_njk(Cg)
 
-        ae_norm = np.sum(Cg.conj() * Cg) + beta_njk.conj() @ (self._qij @ beta_njk)
+        ae_norm = np.sum(Cg.conj() * Cg) + beta_njk.conj() @ (self.get_qijs() @ beta_njk)
 
         return ae_norm.real
 
@@ -502,17 +532,10 @@ class vasp_ae_wfc(object):
         #
         #     nproj += lmmax
 
-        nablaij = [
-            block_diag([
-                projector.pawpp[projector.element_idx[iatom]].get_nablaij()[ii]
-                for iatom in range(projector.natoms)
-            ])
-            for ii in range(3)
-        ]
         for ii in range(3):
-            moment_mat_oc[ii] = beta_nk.conj() @ (nablaij[ii] @ beta_mk)
+            moment_mat_oc[ii] = beta_nk.conj() @ (self.get_nablaijs()[ii] @ beta_mk)
             if self._pswfc._lsoc:
-                moment_mat_oc[ii] += beta_nk2.conj() @ (nablaij[ii] @ beta_mk2)
+                moment_mat_oc[ii] += beta_nk2.conj() @ (self.get_nablaijs() @ beta_mk2)
 
         return  moment_mat_ps - 1j*moment_mat_oc
 
