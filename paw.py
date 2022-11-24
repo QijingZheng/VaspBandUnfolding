@@ -514,27 +514,23 @@ class pawpotcar(object):
         '''
         Return total number of lm-channel projector functions.
         '''
+        if not hasattr(self, '_lmmax'):
+            self._lmmax = np.sum(2 * self.proj_l + 1)
 
-        return np.sum(2 * self.proj_l + 1)
-
-    @property
-    def lmax(self):
-        '''
-        Return total number of l-channel projector functions.
-        '''
-
-        return self.proj_l.size
+        return self._lmmax
 
     @property
     def ilm(self):
         '''
         '''
+        if not hasattr(self, '_ilm'):
+            self._ilm = [
+                (i, l, m)
+                for i, l in enumerate(self.proj_l)
+                for m in range(-l, l+1)
+            ]
 
-        return [
-            (i, l, m)
-            for i, l in enumerate(self.proj_l)
-            for m in range(-l, l+1)
-        ]
+        return self._ilm
 
     def plot(self):
         '''
