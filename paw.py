@@ -478,23 +478,19 @@ class pawpotcar(object):
         '''
 
         if not hasattr(self, 'paw_qij'):
-            # The l quantum number of each partial waves
-            LL = [l for l in self.proj_l for m in range(-l, l+1)]
-            # The m quantum number of each partial waves
-            MM = [m for l in self.proj_l for m in range(-l, l+1)]
-            # The index of each partial waves
-            WW = [i for i, l in enumerate(self.proj_l) for m in range(-l, l+1)]
-
-            lmmax = len(LL)
-            self.paw_qij = np.zeros((lmmax, lmmax))
-            for ii in range(lmmax):
+            self.paw_qij = np.zeros((self.lmmax, self.lmmax))
+            for ii in range(self.lmmax):
                 for jj in range(ii+1):
-                    if (LL[ii] == LL[jj]) and (MM[ii] == MM[jj]):
-                        self.paw_qij[ii, jj] = self.radial_simp_int(
-                            self.paw_ae_wfc[WW[ii]] * self.paw_ae_wfc[WW[jj]] -
-                            self.paw_ps_wfc[WW[ii]] * self.paw_ps_wfc[WW[jj]]
+                    n1, l1, m1 = self.ilm[ii]
+                    n2, l2, m2 = self.ilm[jj]
+                    if (l1 == l2) and (m1 == m2):
+                        self.paw_qij[ii,jj] = self.radial_simp_int(
+                            self.paw_ae_wfc[n1] * self.paw_ae_wfc[n2]
+                            -
+                            self.paw_ps_wfc[n1] * self.paw_ps_wfc[n2]
                         )
-                        self.paw_qij[jj, ii] = self.paw_qij[ii, jj]
+
+                        self.paw_qij[jj,ii] = self.paw_qij[ii,jj]
 
         return self.paw_qij
 
