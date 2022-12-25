@@ -173,11 +173,12 @@ class ewaldsum(object):
         return Ut
 
 
-    def get_madelung(self):
+    def get_madelung(self, iref: int=0):
         '''
         '''
+        assert iref < self._na
         # index for reference atom
-        ii = 0
+        ii = iref
         # nearest-neighbour of ref atom
         rij = self._scapos - self._scapos[ii]
         rij[rij >= 0.5] -= 1.0
