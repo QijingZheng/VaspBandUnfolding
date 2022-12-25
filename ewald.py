@@ -49,6 +49,7 @@ class ewaldsum(object):
         # the decaying parameter
         if eta is None:
             self._eta = np.sqrt(np.pi) / (self._omega)**(1./3)
+            # self._eta = np.sqrt(np.pi) / np.linalg.norm(self._Acell, axis=1).min()
         else:
             self._eta = eta
 
@@ -195,20 +196,38 @@ class ewaldsum(object):
         return M
 
 
-
 if __name__ == '__main__':
     from ase.io import read
 
-    atoms = read('NaCl.vasp')
-    ZZ = {'Na':1, 'Cl':-1}
+    crystals = [
+        'NaCl.vasp',
+        'CsCl.vasp',
+        'ZnO-Hex.vasp',
+        'ZnO-Cub.vasp',
+        'TiO2.vasp',
+        'CaF2.vasp',
+    ]
 
-    esum = ewaldsum(atoms, ZZ) 
-    print(esum.get_ewaldsum())
-    print(esum.get_madelung())
+    ZZ = {
+        'Na':  1, 'Ca':  2,
+        'Cl': -1,  'F': -1,
+        'Cs':  1,
+        'Ti':  4,
+        'Zn':  2,
+         'O': -2,
+    }
 
-    atoms = read('CsCl.vasp')
-    ZZ = {'Cs':1, 'Cl':-1}
+    print('-' * 30)
+    print(f'{"Crystal":>9s} | {"Madelung Constant":>18s}')
+    print('-' * 30)
 
-    esum = ewaldsum(atoms, ZZ) 
-    print(esum.get_ewaldsum())
-    print(esum.get_madelung())
+    for crys in crystals:
+        atoms = read(crys)
+        esum = ewaldsum(atoms, ZZ) 
+
+        # print(esum.get_ewaldsum())
+        M = esum.get_madelung()
+        C = crys.replace('.vasp', '')
+        print(f'{C:>9s} | {M:18.15f}')
+
+    print('-' * 30)
