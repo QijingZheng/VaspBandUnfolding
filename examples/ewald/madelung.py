@@ -24,9 +24,9 @@ if __name__ == '__main__':
          'O': -2,
     }
 
-    print('-' * 30)
-    print(f'{"Crystal":>9s} | {"Madelung Constant":>18s}')
-    print('-' * 30)
+    print('-' * 41)
+    print(f'{"Crystal":>9s} | Ref Atom | {"Madelung Constant":>18s}')
+    print('-' * 41)
 
     for crys in crystals:
         atoms = read(crys)
@@ -35,6 +35,7 @@ if __name__ == '__main__':
         # print(esum.get_ewaldsum())
         M = esum.get_madelung()
         C = crys.replace('.vasp', '')
-        print(f'{C:>9s} | {M:18.15f}')
+        R = atoms.get_chemical_symbols()[0]
+        print(f'{C:>9s} | {R:^8s} | {M:18.12f}')
 
-    print('-' * 30)
+    print('-' * 41)
