@@ -155,13 +155,13 @@ class vaspwfc(object):
         # goto the start of the file and read the first record
         self._wfc.seek(0)
         self._recl, self._nspin, self._rtag = np.array(
-            np.fromfile(self._wfc, dtype=np.float, count=3),
+            np.fromfile(self._wfc, dtype=np.float64, count=3),
             dtype=np.int64
         )
         self._WFPrec = self.setWFPrec()
         # the second record
         self._wfc.seek(self._recl)
-        dump = np.fromfile(self._wfc, dtype=np.float, count=12)
+        dump = np.fromfile(self._wfc, dtype=np.float64, count=12)
 
         self._nkpts = int(dump[0])                     # No. of k-points
         self._nbands = int(dump[1])                     # No. of bands
@@ -214,7 +214,7 @@ class vaspwfc(object):
             for jj in range(self._nkpts):
                 rec = self.whereRec(ii+1, jj+1, 1) - 1
                 self._wfc.seek(rec * self._recl)
-                dump = np.fromfile(self._wfc, dtype=np.float,
+                dump = np.fromfile(self._wfc, dtype=np.float64,
                                    count=4+3*self._nbands)
                 if ii == 0:
                     self._nplws[jj] = int(dump[0])

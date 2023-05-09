@@ -33,7 +33,7 @@ def read_cproj_NormalCar(inf='NormalCAR', save_cproj=True):
     rec1 = ncr.read_ints()
     lmdim, nions, nrspinors = rec1
 
-    # rec2 = ncr.read_record(dtype=np.complex)
+    # rec2 = ncr.read_record(dtype=np.complex128)
     cqij = np.array(ncr.read_reals()).reshape((lmdim, lmdim, nions, nrspinors),
                                               order='F')
 
@@ -45,7 +45,7 @@ def read_cproj_NormalCar(inf='NormalCAR', save_cproj=True):
     cproj = []
     while True:
         try:
-            rec = ncr.read_record(dtype=np.complex)
+            rec = ncr.read_record(dtype=np.complex128)
             cproj.append(rec)
         except:
             break
