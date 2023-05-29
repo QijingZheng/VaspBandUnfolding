@@ -436,7 +436,7 @@ class unfold():
         GoffsetIndex = Goffset % self.wfc._ngrid[np.newaxis, :]
 
         # 3d grid for planewave coefficients
-        wfc_k_3D = np.zeros(self.wfc._ngrid, dtype=np.complex)
+        wfc_k_3D = np.zeros(self.wfc._ngrid, dtype=np.complex128)
 
         # if self._lsoc:
         #     # the weights and corresponding energies

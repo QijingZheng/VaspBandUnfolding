@@ -212,10 +212,10 @@ class pawpotcar(object):
             for rr in dump[1:]:
                 reci, real = rr.split('Real Space Part')
                 qprojs.append(
-                    np.fromstring(reci, np.float, sep=' ')
+                    np.fromstring(reci, np.float64, sep=' ')
                 )
                 rprojs.append(
-                    np.fromstring(real, np.float, sep=' ')
+                    np.fromstring(real, np.float64, sep=' ')
                 )
 
         # the real space radial grid for the projector functions

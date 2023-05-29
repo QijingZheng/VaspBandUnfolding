@@ -43,7 +43,7 @@ def nac_from_vaspwfc(waveA, waveB, gamma=True,
     bmax = phi_i._nbands if bmax is None else bmax
     nbasis = bmax - bmin + 1
 
-    nacType = np.float if gamma else np.complex
+    nacType = np.float64 if gamma else np.complex128
     nacs = np.zeros((nbasis, nbasis), dtype=nacType)
 
     from time import time
