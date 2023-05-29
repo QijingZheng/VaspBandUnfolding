@@ -613,13 +613,13 @@ def find_fermi_level(band_energies, kpt_weight,
         np.sum(occ * (band_energies <= en) * kpt_weight[None, :, None])
         for en in e0
     ])
-    ne_tmp = nelect_lt_en[nedos/2]
+    ne_tmp = nelect_lt_en[nedos//2]
     if (np.abs(ne_tmp - nelect) < 0.05):
-        i_fermi = nedos / 2
+        i_fermi = nedos // 2
         i_lower = i_fermi - 1
         i_upper = i_fermi + 1
     elif (ne_tmp > nelect):
-        for ii in range(nedos/2-1, -1, -1):
+        for ii in range(nedos//2-1, -1, -1):
             ne_tmp = nelect_lt_en[ii]
             if ne_tmp < nelect:
                 i_fermi = ii
@@ -627,7 +627,7 @@ def find_fermi_level(band_energies, kpt_weight,
                 i_upper = i_fermi + 1
                 break
     else:
-        for ii in range(nedos/2+1, nedos):
+        for ii in range(nedos//2+1, nedos):
             ne_tmp = nelect_lt_en[ii]
             if ne_tmp > nelect:
                 i_fermi = ii
