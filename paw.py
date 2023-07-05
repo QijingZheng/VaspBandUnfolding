@@ -408,9 +408,10 @@ class pawpotcar(object):
 
             Bmat = np.array([0.0, 1.0])
             return solve(Amat, Bmat)
-
+        
+        lmax = self.proj_l.max() * 2 + 1
         gl = []
-        for l in range(self.lmax):
+        for l in range(lmax):
             q = find_q(l) / self.comp_rmax
             a = find_alpha(self.comp_rmax, q, l)
             gl.append(lambda r: (
@@ -620,6 +621,20 @@ class pawpotcar(object):
         return self._lmmax
 
     @property
+    def lmidx(self):
+        '''
+        Enumerating (l,m)
+        '''
+        if not hasattr(self, '_lmidx'):
+            lmax = self.proj_l.max() * 2 + 1
+            _lmidx = np.array([[l, m]
+                               for l in range(lmax)
+                               for m in range(-l, l+1)])
+            self._lmidx = _lmidx
+
+        return self._lmidx
+
+    @property
     def ilm(self):
         '''
         '''
@@ -712,6 +727,106 @@ class pawpotcar(object):
                 for ii in range(self.lmax)]
         )
         return pstr
+
+    def get_Delta_Li1i2(self):
+        """
+        \Delta_Li1i2^a = \int dr r^l Y_L(^r) [\phi_i1^a(^r)\phi_i2^a(^r) - ~\phi_i1^a(^r) ~\phi_i2^a(^r)]
+                       = \int dr r^(l+2) [\phi_i1^a(r) phi_i2^a(r) - ~\phi_i1^a(r) ~\phi_i2^a(r)] * G(l1,l2,l,m1,m2,m)
+
+        where L  = (l, m)
+              i1 = (n1, l1, m1)
+              i2 = (n1, l2, m2)
+        and G(l1,l2,l,m1,m2,m) is the ``Gaunt Coefficient''
+
+        Returns: Delta_Li1i2
+        """
+        from pysbt import GauntTable
+
+        L    = self.lmidx
+        i1i2 = np.array(self.ilm)
+        lmax = self.proj_l.max() * 2 + 1
+        npro = self.proj_l.size
+
+        ## Raidal part \int dr r^(l+2) (phi_n1^ae(r) * phi_n2^ae(r) - phi_n1^ps(r) * phi_n2^ps(r))
+        ## Note that pwav_ae = phi_n(r) / r as defined in POTCAR
+        radial_integral = np.zeros((lmax, npro, npro))
+        for l in range(lmax):
+            rpower = self.rgrid ** l    ## r^l
+            for n1 in range(npro):
+                for n2 in range(npro):
+                    radial_integral[l, n1, n2] = self.radial_simp_int(
+                            rpower * (self.paw_ae_wfc[n1,:] * self.paw_ae_wfc[n2,:] -
+                                      self.paw_ps_wfc[n1,:] * self.paw_ps_wfc[n2,:])
+                            )
+
+        Delta_Li1i2 = np.zeros((L.shape[0], i1i2.shape[0], i1i2.shape[0]),
+                               dtype=float)
+
+        ## Asselmble Delta_Li1i2
+        for iL, [l, m] in enumerate(L):
+            for i1, [n1, l1, m1] in enumerate(i1i2):
+                for i2, [n2, l2, m2] in enumerate(i1i2):
+                    Delta_Li1i2[iL, i1, i2] = radial_integral[l, n1, n2] * GauntTable(l1, l2, l, m1, m2, m)
+
+        return Delta_Li1i2
+
+    def get_integral_1234(self):
+        """
+        (phi_i1 phi_i2 | phi_i3 phi_i4)
+        = \sum_lm 4pi/(2l+1)
+            \int drdr' r^2 r'^2   phi_i1*^2(r)  phi_i2*^2(r)  r_<^l / r_>^(l+1)  phi_i3(r')  phi_i4(r')
+            G(l1,l2,l,m1,m2,m) G(l3,l4,l,m3,m4,m)
+        """
+        from pysbt import GauntTable
+
+        L    = self.lmidx
+        i1i2 = np.array(self.ilm)
+        lmax = self.proj_l.max() * 2 + 1
+        npro = self.proj_l.size
+
+        ## r_< and r_>
+        r = self.rgrid
+        r_l = np.minimum(r[:, None], r[None, :])
+        r_g = np.maximum(r[:, None], r[None, :])
+
+        ## radial part:
+        ## \int drdr' r^2 r'^2 * phi_n1(r)* phi_n2(r)*   ( r_<^l/_>^(l+1) )   phi_n3(r') phi_n4(r')
+        radial_integral = np.zeros((lmax, npro, npro, npro, npro), dtype=float)
+        for l in range(lmax):
+            for n1 in range(npro):
+                for n2 in range(npro):
+                    for n3 in range(npro):
+                        for n4 in range(npro):
+                            for irp, rprime in enumerate(r):
+                                radial_integral[l, n1, n2, n3, n4] += (
+                                        # integrate dr first
+                                        self.radial_simp_int(self.paw_ae_wfc[n1,:] * self.paw_ae_wfc[n2,:]
+                                                             * (r_l[irp] ** l / r_g[irp] ** (l+1))
+                                                             )  # r_<^l / r_>^(l+1)
+                                        * self.paw_ae_wfc[n3,irp] * self.paw_ae_wfc[n4,irp] # phi(r')
+                                        * self.rad_simp_w[irp]  # simpson integrate rule
+                                )
+
+        ## Assemble 4 term integral with radial part and angular part
+        integral_1234 = np.zeros((i1i2.shape[0], i1i2.shape[0], i1i2.shape[0], i1i2.shape[0]), dtype=float)
+        for iL, [l, m] in enumerate(L):
+            for i1, [n1, l1, m1] in enumerate(i1i2):
+                for i2, [n2, l2, m2] in enumerate(i1i2):
+                    G12 = GauntTable(l1, l2, l, m1, m2, m)
+                    if np.abs(G12) < 1E-6:
+                        continue
+
+                    for i3, [n3, l3, m3] in enumerate(i1i2):
+                        for i4, [n4, l4, m4] in enumerate(i1i2):
+                            G34 = GauntTable(l3, l4, l, m3, m4, m)
+                            integral_1234[i1, i2, i3, i4] += (
+                                    4 * np.pi / (2 * l + 1)
+                                    * radial_integral[l, n1, n2, n3, n4]
+                                    * G12 * G34
+                                    )
+
+        return integral_1234
+
 
 
 class nonlr(object):
@@ -1187,3 +1302,5 @@ if __name__ == '__main__':
     # ps.plot()
 
     pot = pawpotcar(potfile="POTCAR")
+    pot.get_Delta_Li1i2()
+    pot.get_integral_1234()
