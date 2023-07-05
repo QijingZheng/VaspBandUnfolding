@@ -4,6 +4,7 @@ import re
 import numpy as np
 from vasp_constant import *
 from sph_harm import sph_r, sph_c
+import scipy
 
 
 def fftchk1(n):
@@ -180,6 +181,8 @@ class pawpotcar(object):
         self.read_proj(non_radial_part)
         # read the ae/ps partial waves in the core region
         self.read_partial_wfc(radial_part)
+        # set the compensation charge function
+        self.set_comp_function()
         # c-spline interpolation of the projector function
         self.csplines()
 
@@ -250,7 +253,8 @@ class pawpotcar(object):
              ae wavefunction
         '''
         data = datastr.strip().split('\n')
-        nmax = int(data[0].split()[0])
+        nmax, rmax = np.float64(data[0].split()[0:2])
+        nmax = int(nmax)
         grid_start_idx = data.index(" grid") + 1
 
         core_data = np.array([
@@ -262,6 +266,8 @@ class pawpotcar(object):
         # number of projectors
         nproj = self.proj_l.size
 
+        # compensation charge radius
+        self.comp_rmax = rmax
         # core region logarithmic radial grid
         self.rgrid = core_data[0]
         # core region all-electron potential
@@ -319,6 +325,100 @@ class pawpotcar(object):
                 3. + self.rad_simp_w[ii]
             self.rad_simp_w[ii-1] = H * self.rgrid[ii-1] * 4. / 3.
             self.rad_simp_w[ii-2] = H * self.rgrid[ii-2] / 3.
+
+    def set_comp_function(self):
+        from scipy.special import spherical_jn
+        from scipy.integrate import quadrature
+        from scipy.linalg import solve
+
+        '''
+        g_l(r) = a1 jl(q1 r) + a2 jl(q2 r)
+        where
+            g_l(rcomp) = 0
+            int_0^rcom dr gl(r) r^(l+2) = 1
+            for r = rcomp, d/dr jl(qi r) = 0
+        '''
+
+        def find_q(L: int) -> [float, float]:
+            """
+            @in:
+                - L: angular momentum number
+            @out:
+                - two roots of j_L(x) = 0
+            """
+            THRESHOLD = 1E-10
+
+            nfound = 0
+            ret = [0.0, 0.0]
+
+            xinit = 1.0
+            for nfound in range(2):
+                # find the coarse interval of root
+                x1 = xinit
+                x2 = x1 + 1.0
+                fx1 = spherical_jn(L, x1)
+                fx2 = spherical_jn(L, x2)
+                while fx1 * fx2 > 0:
+                    x2 += 1.0
+                    fx2 = spherical_jn(L, x2)
+
+                # binary search
+                x1  = x2 - 1.0; fx1 = spherical_jn(L, x1)
+                while x2 - x1 > THRESHOLD:
+                    mid = (x1 + x2) / 2
+                    fmid = spherical_jn(L, mid)
+                    if fx1 * fmid < 0:
+                        x2 = mid
+                        fx2 = fmid
+                    else:
+                        x1 = mid
+                        fx1 = fmid
+
+                ret[nfound] = x1
+                xinit = x2
+            return ret
+
+        def find_alpha(R: float, q: [float, float], l: int) -> [float, float]:
+            """
+            g_l(r) = alpha1 jl(q1 r) + alpha2 jl(q2 r)
+            """
+            def glr_int(r: float, q: float, l: int) -> float:
+                """
+                \int_0^r j_l(q^l * r) r^(l+2) dr
+
+                @in:
+                    r: compensation charge radius
+                    q: q produced in `find_q`
+                    l: angular momentum number
+                @out:
+                    \int_0^r j_l(q^l * r) r^(l+2) dr
+                """
+                GAUSSIAN_QUADRATURE_ORDER = 32
+                val, err = quadrature(
+                        lambda x: spherical_jn(l, q * x) * x**(l+2),
+                        0.0, r, maxiter=GAUSSIAN_QUADRATURE_ORDER)
+                return val
+
+            # Solve 2x2 linear system using gaussian elimination
+            Amat = np.zeros((2, 2))
+            Amat[0, 0] = q[0] * spherical_jn(l, q[0] * R, derivative=True)
+            Amat[0, 1] = q[1] * spherical_jn(l, q[1] * R, derivative=True)
+            Amat[1, 0] = glr_int(R, q[0], l)
+            Amat[1, 1] = glr_int(R, q[1], l)
+
+            Bmat = np.array([0.0, 1.0])
+            return solve(Amat, Bmat)
+
+        gl = []
+        for l in range(self.lmax):
+            q = find_q(l) / self.comp_rmax
+            a = find_alpha(self.comp_rmax, q, l)
+            gl.append(lambda r: (
+                a[0] * spherical_jn(l, q[0] * r) +
+                a[1] * spherical_jn(l, q[1] * r)
+                ))
+
+        self.gl = gl
 
     def radial_simp_int(self, f):
         '''
@@ -1068,10 +1168,10 @@ class radial2grid(object):
 
 if __name__ == '__main__':
     import time
-    xx = open('examples/projectors/lreal_true/potcar.mo').read()
+    # xx = open('examples/projectors/lreal_true/potcar.mo').read()
 
-    t0 = time.time()
-    ps = pawpotcar(xx)
+    # t0 = time.time()
+    # ps = pawpotcar(xx)
 
     # t1 = time.time()
     # ps.csplines()
@@ -1084,4 +1184,6 @@ if __name__ == '__main__':
     # print(ps)
     # print(ps.paw_ae_wfc[1][-1])
 
-    ps.plot()
+    # ps.plot()
+
+    pot = pawpotcar(potfile="POTCAR")
