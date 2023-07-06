@@ -784,7 +784,7 @@ class pawpotcar(object):
 
         return Delta_Li1i2
 
-    def get_integral_1234(self):
+    def get_integral_1234(self, use_ps_wav=False):
         """
         (phi_i1 phi_i2 | phi_i3 phi_i4)
         = \sum_lm 4pi/(2l+1)
@@ -797,6 +797,11 @@ class pawpotcar(object):
         i1i2 = np.array(self.ilm)
         lmax = self.proj_l.max() * 2 + 1
         npro = self.proj_l.size
+
+        if use_ps_wav:
+            wav = self.paw_ae_wfc
+        else:
+            wav = self.paw_ps_wfc
 
         ## r_< and r_>
         r = self.rgrid
@@ -814,10 +819,10 @@ class pawpotcar(object):
                             for irp, rprime in enumerate(r):
                                 radial_integral[l, n1, n2, n3, n4] += (
                                         # integrate dr first
-                                        self.radial_simp_int(self.paw_ae_wfc[n1,:] * self.paw_ae_wfc[n2,:]
+                                        self.radial_simp_int(wav[n1,:] * wav[n2,:]
                                                              * (r_l[irp] ** l / r_g[irp] ** (l+1))
                                                              )  # r_<^l / r_>^(l+1)
-                                        * self.paw_ae_wfc[n3,irp] * self.paw_ae_wfc[n4,irp] # phi(r')
+                                        * wav[n3,irp] * wav[n4,irp] # phi(r')
                                         * self.rad_simp_w[irp]  # simpson integrate rule
                                 )
 
@@ -843,17 +848,11 @@ class pawpotcar(object):
 
     def get_integral_phi12_gl(self):
         '''
-        (~phi_i1 ~phi_i2 | g_l)
-        '''
-        # TODO
-        pass
-
-    def get_integral_gl(self):
-        '''
-        ((g_l)) = (g_l | g_l)
-            = sum_l'm' (4pi^2/(2l'+1))
-                \int drdr' r^2 r'^2 g_l(r)  (r_<^l' / r_>^(l'_1))  g_l(r')
-                G(l, l', 0, m, m', 0)^2
+        (~phi_i1 ~phi_i2 | g_l) =
+            sum_lm 4pi / (2l+1)
+                \int drdr' r^2 r'^2  ~phi_i1(r) ~phi_i2(r)  r_<^l/r_>^(l+1)  g_l(r')
+                G(l1,l2,l,m1,m2,m)  2sqrt(pi) G(l3,l,0,m3,m,0)
+                where L = (l3,m3)
         '''
         # TODO
         from pysbt import GauntTable
@@ -862,6 +861,59 @@ class pawpotcar(object):
         i1i2 = np.array(self.ilm)
         lmax = self.proj_l.max() * 2 + 1
         npro = self.proj_l.size
+
+        ## r_< and r_>
+        r = self.rgrid
+        r_l = np.minimum(r[:, None], r[None, :])
+        r_g = np.maximum(r[:, None], r[None, :])
+
+        ## gl(r) and gl(r')
+        glr = np.array([[self.gl[l](rp)
+                         for rp in r]
+                        for l in range(lmax)
+                        ])
+
+        ## radial part
+        ## \int drdr' 4pi / (2l+1) r^2 r'^2 * ~phi_n1(r)* ~phi_n2(r)*  (r_<^l/r_>^(l+1))  g_l(r')
+        radial_integral = np.zeros((npro, npro, lmax, lmax), dtype=float)   # [n1, n2, l3, l]
+        for n1 in range(npro):
+            for n2 in range(npro):
+                for l3 in range(lmax):
+                    for l in range(lmax):
+                        for irp, rprime in enumerate(glr[l,0:self.comp_rmax_idx]):
+                            radial_integral[n1, n2, l3, l] += 4 * np.pi / (2 * l + 1) * (
+                                    self.radial_simp_int(self.paw_ps_wfc[n1,:] * self.paw_ps_wfc[n2,:]  # r^2 ~phi_n1(r) ~phi_n2(r)
+                                                         * r_l[irp,:] ** l / r_g[irp,:] ** (l+1), # r_<^l / r_>^(l+1)
+                                                         inside_comp_rmax=True)
+                                    * rprime ** 2               # r'^2
+                                    * glr[l3,irp]               # g_l(r')
+                                    * self.rad_simp_w[irp])     # simpson rule
+
+        ## assemble integral_phi12_gl
+        integral_phi12_gl = np.zeros((i1i2.shape[0], i1i2.shape[0], L.shape[0]))
+        for [l, m] in L:
+            for i1, [n1, l1, m1] in enumerate(i1i2):
+                for i2, [n2, l2, m2] in enumerate(i1i2):
+                    G12 = GauntTable(l1,l2,l,m1,m2,m)
+                    if np.abs(G12) < 1E-6:
+                        continue
+                    for iL, [l3, m3] in enumerate(L):
+                        G3l = GauntTable(l3,l,0,m3,m,0)
+                        integral_phi12_gl[i1,i2,iL] += radial_integral[n1,n2,l3,l] * 2 * np.sqrt(np.pi) * G12 * G3l
+
+        return integral_phi12_gl
+
+    def get_integral_gl(self):
+        '''
+        ((g_l)) = (g_l | g_l)
+            = sum_l'm' (4pi^2/(2l'+1))
+                \int drdr' r^2 r'^2 g_l(r)  (r_<^l' / r_>^(l'_1))  g_l(r')
+                G(l, l', 0, m, m', 0)^2
+        '''
+        from pysbt import GauntTable
+
+        L    = self.lmidx
+        lmax = self.proj_l.max() * 2 + 1
 
         ## r_< and r_>
         r = self.rgrid
@@ -884,8 +936,8 @@ class pawpotcar(object):
                     # integrate dr first
                     integral_gl[l1] += 4 * np.pi / (2 * l2 + 1) * (
                             self.radial_simp_int(r ** 2 * rprime ** 2
-                                                 * r_l[irp] ** (l2) / r_g[irp] ** (l2 + 1)
-                                                 * glr[l1] * glr[l1,irp])
+                                                 * r_l[irp,:] ** (l2) / r_g[irp,:] ** (l2 + 1)
+                                                 * glr[l1,:] * glr[l1,irp])
                             ) * Gl1l2 ** 2 * self.rad_simp_w[irp]   # simpson's rule
 
         return integral_gl
@@ -1366,6 +1418,7 @@ if __name__ == '__main__':
     pot = pawpotcar(potfile="POTCAR")
     pot.get_Delta_Li1i2()
     # pot.get_integral_1234()
-    pot.get_integral_gl()
+    # pot.get_integral_gl()
+    pot.get_integral_phi12_gl()
     t1 = time.time()
     print(t1 - t0)
