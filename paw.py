@@ -185,6 +185,8 @@ class pawpotcar(object):
         self.set_comp_function()
         # c-spline interpolation of the projector function
         self.csplines()
+        # setup simpson integration rule
+        self.set_simpi_weight()
 
     def read_proj(self, datastr):
         '''
@@ -327,10 +329,6 @@ class pawpotcar(object):
             self.rad_simp_w[ii-2] = H * self.rgrid[ii-2] / 3.
 
     def set_comp_function(self):
-        from scipy.special import spherical_jn
-        from scipy.integrate import quadrature
-        from scipy.linalg import solve
-
         '''
         g_l(r) = a1 jl(q1 r) + a2 jl(q2 r)
         where
@@ -338,6 +336,10 @@ class pawpotcar(object):
             int_0^rcom dr gl(r) r^(l+2) = 1
             for r = rcomp, d/dr jl(qi r) = 0
         '''
+
+        from scipy.special import spherical_jn
+        from scipy.integrate import quadrature
+        from scipy.linalg import solve
 
         def find_q(L: int) -> [float, float]:
             """
@@ -421,7 +423,7 @@ class pawpotcar(object):
 
         self.gl = gl
 
-    def radial_simp_int(self, f):
+    def radial_simp_int(self, f, inside_comp_rmax=False):
         '''
         Simpson integration of a function on the logarithmic radial grid.
         '''
@@ -429,7 +431,11 @@ class pawpotcar(object):
             self.set_simpi_weight()
         f = np.asarray(f)
 
-        return np.sum(self.rad_simp_w * f)
+        if inside_comp_rmax:
+            idx = self.comp_rmax_idx
+            return np.sum(self.rad_simp_w[0:idx] * f[0:idx])
+        else:
+            return np.sum(self.rad_simp_w * f)
 
     def get_nablaij(self, lreal: bool=True, lforce: bool=False, kmax=200):
         '''
@@ -647,6 +653,14 @@ class pawpotcar(object):
 
         return self._ilm
 
+    @property
+    def comp_rmax_idx(self):
+        if not hasattr(self, '_comp_rmax_idx'):
+            idx = np.searchsorted(self.rgrid, self.comp_rmax)
+            self._comp_rmax_idx = idx
+
+        return self._comp_rmax_idx
+
     def plot(self):
         '''
         '''
@@ -827,6 +841,54 @@ class pawpotcar(object):
 
         return integral_1234
 
+    def get_integral_phi12_gl(self):
+        '''
+        (~phi_i1 ~phi_i2 | g_l)
+        '''
+        # TODO
+        pass
+
+    def get_integral_gl(self):
+        '''
+        ((g_l)) = (g_l | g_l)
+            = sum_l'm' (4pi^2/(2l'+1))
+                \int drdr' r^2 r'^2 g_l(r)  (r_<^l' / r_>^(l'_1))  g_l(r')
+                G(l, l', 0, m, m', 0)^2
+        '''
+        # TODO
+        from pysbt import GauntTable
+
+        L    = self.lmidx
+        i1i2 = np.array(self.ilm)
+        lmax = self.proj_l.max() * 2 + 1
+        npro = self.proj_l.size
+
+        ## r_< and r_>
+        r = self.rgrid
+        r_l = np.minimum(r[:, None], r[None, :])
+        r_g = np.maximum(r[:, None], r[None, :])
+
+        ## gl(r) and gl(r')
+        glr = np.array([[self.gl[l](rp)
+                         for rp in r]
+                        for l in range(lmax)
+                        ])
+
+        integral_gl = np.zeros(L.size, dtype=float)
+        for iL1, (l1, m1) in enumerate(L):
+            for iL2, (l2, m2) in enumerate(L):
+                Gl1l2 = GauntTable(l1, l2, 0, m1, m2, 0)
+                if np.abs(Gl1l2) < 1E-6:
+                    continue
+                for irp, rprime in enumerate(self.rgrid[0:self.comp_rmax_idx]):
+                    # integrate dr first
+                    integral_gl[l1] += 4 * np.pi / (2 * l2 + 1) * (
+                            self.radial_simp_int(r ** 2 * rprime ** 2
+                                                 * r_l[irp] ** (l2) / r_g[irp] ** (l2 + 1)
+                                                 * glr[l1] * glr[l1,irp])
+                            ) * Gl1l2 ** 2 * self.rad_simp_w[irp]   # simpson's rule
+
+        return integral_gl
 
 
 class nonlr(object):
@@ -1285,7 +1347,7 @@ if __name__ == '__main__':
     import time
     # xx = open('examples/projectors/lreal_true/potcar.mo').read()
 
-    # t0 = time.time()
+    t0 = time.time()
     # ps = pawpotcar(xx)
 
     # t1 = time.time()
@@ -1303,4 +1365,7 @@ if __name__ == '__main__':
 
     pot = pawpotcar(potfile="POTCAR")
     pot.get_Delta_Li1i2()
-    pot.get_integral_1234()
+    # pot.get_integral_1234()
+    pot.get_integral_gl()
+    t1 = time.time()
+    print(t1 - t0)
