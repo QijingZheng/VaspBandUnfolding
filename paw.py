@@ -7,6 +7,11 @@ from sph_harm import sph_r, sph_c
 import scipy
 
 
+### Constants used by coulomb interaction calculation
+BOHR2ANGSTROM = 0.529177210903      # 1 Bohr = 0.529177210903 A
+EHARTREE      = 2 * RYTOEV          # Eh = 27.2114 eV
+
+
 def fftchk1(n):
     """
     Check if n can be factorized into products of 2, 3 and 5.
@@ -942,6 +947,44 @@ class pawpotcar(object):
 
         return integral_gl
 
+    def get_DeltaC_1234(self):
+        '''
+        DeltaC_i1i2i3i4 = 1/2 [(phi_i1 phi_i2 | phi_i3 phi_i4) - (~phi_i1 ~phi_i2 | ~phi_i3 ~phi_i4)]
+            - sum_L [
+                1/2 Delta_Li1i2 (~phi_i1 ~phi_i2 | g_l)
+                + 1/2 Delta_Li3i4 (~phi_i3 ~phi_i4 | g_l)
+                + Delta_Li1i2 ((g_l)) Delta_Li3i4
+            ]
+        '''
+        L    = self.lmidx
+        i1i2 = np.array(self.ilm)
+
+        Delta_Li1i2       = self.get_Delta_Li1i2()
+        integral_phi12_gl = self.get_integral_phi12_gl()
+        integral_gl       = self.get_integral_gl()
+
+        first_term  = 0.5 * (self.get_integral_1234(use_ps_wav=False) - self.get_integral_1234(use_ps_wav=True))
+        second_term = np.zeros((i1i2.shape[0], i1i2.shape[0], i1i2.shape[0], i1i2.shape[0]), dtype=float)
+        for i1, [n1, l1, m1] in enumerate(i1i2):
+            for i2, [n2, l2, m2] in enumerate(i1i2):
+                for i3, [n3, l3, m3] in enumerate(i1i2):
+                    for i4, [n4, l4, m4] in enumerate(i1i2):
+                        for iL, [l, m] in enumerate(L):
+                            second_term[i1, i2, i3, i4] += 0.5 * (
+                                Delta_Li1i2[iL, i1, i2] * integral_phi12_gl[i1, i2, iL] +
+                                Delta_Li1i2[iL, i3, i4] + integral_phi12_gl[i3, i4, iL]
+                            ) + Delta_Li1i2[iL, i1, i2] * integral_gl[iL] * Delta_Li1i2[iL, i3, i4]
+
+        ## V = 1/(4pi*e0) * e^2/r
+        ## 4pi*e0 = e^2/(a0*Eh) where a0 is the Bohr radius
+        ## Thus 1/(4pi*e0) = a0*Eh/e^2
+        ##      a0 / Angstrom = 0.529177...
+        ##      Eh = 27.2114... eV
+        ##      e^2 vanished with (rho_12|rho_34)
+
+        return (first_term - second_term) * BOHR2ANGSTROM * EHARTREE
+        pass
+
 
 class nonlr(object):
     '''
@@ -1416,9 +1459,10 @@ if __name__ == '__main__':
     # ps.plot()
 
     pot = pawpotcar(potfile="POTCAR")
-    pot.get_Delta_Li1i2()
-    # pot.get_integral_1234()
-    # pot.get_integral_gl()
-    pot.get_integral_phi12_gl()
+    # Delta_Li1i2       = pot.get_Delta_Li1i2()
+    # integral_1234     = pot.get_integral_1234()
+    # integral_gl       = pot.get_integral_gl()
+    # integral_phi12_gl = pot.get_integral_phi12_gl()
+    DeltaC_1234       = pot.get_DeltaC_1234()
     t1 = time.time()
     print(t1 - t0)
