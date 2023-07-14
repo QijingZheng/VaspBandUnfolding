@@ -4,12 +4,6 @@ import re
 import numpy as np
 from vasp_constant import *
 from sph_harm import sph_r, sph_c
-import scipy
-
-
-### Constants used by coulomb interaction calculation
-BOHR2ANGSTROM = 0.529177210903      # 1 Bohr = 0.529177210903 A
-EHARTREE      = 2 * RYTOEV          # Eh = 27.2114 eV
 
 
 def fftchk1(n):
@@ -186,12 +180,8 @@ class pawpotcar(object):
         self.read_proj(non_radial_part)
         # read the ae/ps partial waves in the core region
         self.read_partial_wfc(radial_part)
-        # set the compensation charge function
-        self.set_comp_function()
         # c-spline interpolation of the projector function
         self.csplines()
-        # setup simpson integration rule
-        self.set_simpi_weight()
 
     def read_proj(self, datastr):
         '''
@@ -260,7 +250,7 @@ class pawpotcar(object):
              ae wavefunction
         '''
         data = datastr.strip().split('\n')
-        nmax, rmax = np.float64(data[0].split()[0:2])
+        nmax, rmax = data[0].split()[0:2]
         nmax = int(nmax)
         grid_start_idx = data.index(" grid") + 1
 
@@ -274,7 +264,7 @@ class pawpotcar(object):
         nproj = self.proj_l.size
 
         # compensation charge radius
-        self.comp_rmax = rmax
+        self.rcomp = float(rmax)
         # core region logarithmic radial grid
         self.rgrid = core_data[0]
         # core region all-electron potential
@@ -333,102 +323,7 @@ class pawpotcar(object):
             self.rad_simp_w[ii-1] = H * self.rgrid[ii-1] * 4. / 3.
             self.rad_simp_w[ii-2] = H * self.rgrid[ii-2] / 3.
 
-    def set_comp_function(self):
-        '''
-        g_l(r) = a1 jl(q1 r) + a2 jl(q2 r)
-        where
-            g_l(rcomp) = 0
-            int_0^rcom dr gl(r) r^(l+2) = 1
-            for r = rcomp, d/dr jl(qi r) = 0
-        '''
-
-        from scipy.special import spherical_jn
-        from scipy.integrate import quadrature
-        from scipy.linalg import solve
-
-        def find_q(L: int) -> [float, float]:
-            """
-            @in:
-                - L: angular momentum number
-            @out:
-                - two roots of j_L(x) = 0
-            """
-            THRESHOLD = 1E-10
-
-            nfound = 0
-            ret = [0.0, 0.0]
-
-            xinit = 1.0
-            for nfound in range(2):
-                # find the coarse interval of root
-                x1 = xinit
-                x2 = x1 + 1.0
-                fx1 = spherical_jn(L, x1)
-                fx2 = spherical_jn(L, x2)
-                while fx1 * fx2 > 0:
-                    x2 += 1.0
-                    fx2 = spherical_jn(L, x2)
-
-                # binary search
-                x1  = x2 - 1.0; fx1 = spherical_jn(L, x1)
-                while x2 - x1 > THRESHOLD:
-                    mid = (x1 + x2) / 2
-                    fmid = spherical_jn(L, mid)
-                    if fx1 * fmid < 0:
-                        x2 = mid
-                        fx2 = fmid
-                    else:
-                        x1 = mid
-                        fx1 = fmid
-
-                ret[nfound] = x1
-                xinit = x2
-            return ret
-
-        def find_alpha(R: float, q: [float, float], l: int) -> [float, float]:
-            """
-            g_l(r) = alpha1 jl(q1 r) + alpha2 jl(q2 r)
-            """
-            def glr_int(r: float, q: float, l: int) -> float:
-                """
-                \int_0^r j_l(q^l * r) r^(l+2) dr
-
-                @in:
-                    r: compensation charge radius
-                    q: q produced in `find_q`
-                    l: angular momentum number
-                @out:
-                    \int_0^r j_l(q^l * r) r^(l+2) dr
-                """
-                GAUSSIAN_QUADRATURE_ORDER = 32
-                val, err = quadrature(
-                        lambda x: spherical_jn(l, q * x) * x**(l+2),
-                        0.0, r, maxiter=GAUSSIAN_QUADRATURE_ORDER)
-                return val
-
-            # Solve 2x2 linear system using gaussian elimination
-            Amat = np.zeros((2, 2))
-            Amat[0, 0] = q[0] * spherical_jn(l, q[0] * R, derivative=True)
-            Amat[0, 1] = q[1] * spherical_jn(l, q[1] * R, derivative=True)
-            Amat[1, 0] = glr_int(R, q[0], l)
-            Amat[1, 1] = glr_int(R, q[1], l)
-
-            Bmat = np.array([0.0, 1.0])
-            return solve(Amat, Bmat)
-        
-        lmax = self.proj_l.max() * 2 + 1
-        gl = []
-        for l in range(lmax):
-            q = find_q(l) / self.comp_rmax
-            a = find_alpha(self.comp_rmax, q, l)
-            gl.append(lambda r: (
-                a[0] * spherical_jn(l, q[0] * r) +
-                a[1] * spherical_jn(l, q[1] * r)
-                ))
-
-        self.gl = gl
-
-    def radial_simp_int(self, f, inside_comp_rmax=False):
+    def radial_simp_int(self, f, inside_rcomp=False):
         '''
         Simpson integration of a function on the logarithmic radial grid.
         '''
@@ -436,8 +331,8 @@ class pawpotcar(object):
             self.set_simpi_weight()
         f = np.asarray(f)
 
-        if inside_comp_rmax:
-            idx = self.comp_rmax_idx
+        if inside_rcomp:
+            idx = self.rcomp_idx
             return np.sum(self.rad_simp_w[0:idx] * f[0:idx])
         else:
             return np.sum(self.rad_simp_w * f)
@@ -632,20 +527,6 @@ class pawpotcar(object):
         return self._lmmax
 
     @property
-    def lmidx(self):
-        '''
-        Enumerating (l,m)
-        '''
-        if not hasattr(self, '_lmidx'):
-            lmax = self.proj_l.max() * 2 + 1
-            _lmidx = np.array([[l, m]
-                               for l in range(lmax)
-                               for m in range(-l, l+1)])
-            self._lmidx = _lmidx
-
-        return self._lmidx
-
-    @property
     def ilm(self):
         '''
         '''
@@ -659,12 +540,12 @@ class pawpotcar(object):
         return self._ilm
 
     @property
-    def comp_rmax_idx(self):
-        if not hasattr(self, '_comp_rmax_idx'):
-            idx = np.searchsorted(self.rgrid, self.comp_rmax)
-            self._comp_rmax_idx = idx
+    def rcomp_idx(self):
+        if not hasattr(self, '_rcomp_idx'):
+            idx = np.searchsorted(self.rgrid, self.rcomp)
+            self._rcomp_idx = idx
 
-        return self._comp_rmax_idx
+        return self._rcomp_idx
 
     def plot(self):
         '''
@@ -746,244 +627,6 @@ class pawpotcar(object):
                 for ii in range(self.lmax)]
         )
         return pstr
-
-    def get_Delta_Li1i2(self):
-        """
-        \Delta_Li1i2^a = \int dr r^l Y_L(^r) [\phi_i1^a(^r)\phi_i2^a(^r) - ~\phi_i1^a(^r) ~\phi_i2^a(^r)]
-                       = \int dr r^(l+2) [\phi_i1^a(r) phi_i2^a(r) - ~\phi_i1^a(r) ~\phi_i2^a(r)] * G(l1,l2,l,m1,m2,m)
-
-        where L  = (l, m)
-              i1 = (n1, l1, m1)
-              i2 = (n1, l2, m2)
-        and G(l1,l2,l,m1,m2,m) is the ``Gaunt Coefficient''
-
-        Returns: Delta_Li1i2
-        """
-        from pysbt import GauntTable
-
-        L    = self.lmidx
-        i1i2 = np.array(self.ilm)
-        lmax = self.proj_l.max() * 2 + 1
-        npro = self.proj_l.size
-
-        ## Raidal part \int dr r^(l+2) (phi_n1^ae(r) * phi_n2^ae(r) - phi_n1^ps(r) * phi_n2^ps(r))
-        ## Note that pwav_ae = phi_n(r) / r as defined in POTCAR
-        radial_integral = np.zeros((lmax, npro, npro))
-        for l in range(lmax):
-            rpower = self.rgrid ** l    ## r^l
-            for n1 in range(npro):
-                for n2 in range(npro):
-                    radial_integral[l, n1, n2] = self.radial_simp_int(
-                            rpower * (self.paw_ae_wfc[n1,:] * self.paw_ae_wfc[n2,:] -
-                                      self.paw_ps_wfc[n1,:] * self.paw_ps_wfc[n2,:])
-                            )
-
-        Delta_Li1i2 = np.zeros((L.shape[0], i1i2.shape[0], i1i2.shape[0]),
-                               dtype=float)
-
-        ## Asselmble Delta_Li1i2
-        for iL, [l, m] in enumerate(L):
-            for i1, [n1, l1, m1] in enumerate(i1i2):
-                for i2, [n2, l2, m2] in enumerate(i1i2):
-                    Delta_Li1i2[iL, i1, i2] = radial_integral[l, n1, n2] * GauntTable(l1, l2, l, m1, m2, m)
-
-        return Delta_Li1i2
-
-    def get_integral_1234(self, use_ps_wav=False):
-        """
-        (phi_i1 phi_i2 | phi_i3 phi_i4)
-        = \sum_lm 4pi/(2l+1)
-            \int drdr' r^2 r'^2   phi_i1*^2(r)  phi_i2*^2(r)  r_<^l / r_>^(l+1)  phi_i3(r')  phi_i4(r')
-            G(l1,l2,l,m1,m2,m) G(l3,l4,l,m3,m4,m)
-        """
-        from pysbt import GauntTable
-
-        L    = self.lmidx
-        i1i2 = np.array(self.ilm)
-        lmax = self.proj_l.max() * 2 + 1
-        npro = self.proj_l.size
-
-        if use_ps_wav:
-            wav = self.paw_ae_wfc
-        else:
-            wav = self.paw_ps_wfc
-
-        ## r_< and r_>
-        r = self.rgrid
-        r_l = np.minimum(r[:, None], r[None, :])
-        r_g = np.maximum(r[:, None], r[None, :])
-
-        ## radial part:
-        ## \int drdr' r^2 r'^2 * phi_n1(r)* phi_n2(r)*   ( r_<^l/_>^(l+1) )   phi_n3(r') phi_n4(r')
-        radial_integral = np.zeros((lmax, npro, npro, npro, npro), dtype=float)
-        for l in range(lmax):
-            for n1 in range(npro):
-                for n2 in range(npro):
-                    for n3 in range(npro):
-                        for n4 in range(npro):
-                            for irp, rprime in enumerate(r):
-                                radial_integral[l, n1, n2, n3, n4] += (
-                                        # integrate dr first
-                                        self.radial_simp_int(wav[n1,:] * wav[n2,:]
-                                                             * (r_l[irp] ** l / r_g[irp] ** (l+1))
-                                                             )  # r_<^l / r_>^(l+1)
-                                        * wav[n3,irp] * wav[n4,irp] # phi(r')
-                                        * self.rad_simp_w[irp]  # simpson integrate rule
-                                )
-
-        ## Assemble 4 term integral with radial part and angular part
-        integral_1234 = np.zeros((i1i2.shape[0], i1i2.shape[0], i1i2.shape[0], i1i2.shape[0]), dtype=float)
-        for iL, [l, m] in enumerate(L):
-            for i1, [n1, l1, m1] in enumerate(i1i2):
-                for i2, [n2, l2, m2] in enumerate(i1i2):
-                    G12 = GauntTable(l1, l2, l, m1, m2, m)
-                    if np.abs(G12) < 1E-6:
-                        continue
-
-                    for i3, [n3, l3, m3] in enumerate(i1i2):
-                        for i4, [n4, l4, m4] in enumerate(i1i2):
-                            G34 = GauntTable(l3, l4, l, m3, m4, m)
-                            integral_1234[i1, i2, i3, i4] += (
-                                    4 * np.pi / (2 * l + 1)
-                                    * radial_integral[l, n1, n2, n3, n4]
-                                    * G12 * G34
-                                    )
-
-        return integral_1234
-
-    def get_integral_phi12_gl(self):
-        '''
-        (~phi_i1 ~phi_i2 | g_l) =
-            sum_lm 4pi / (2l+1)
-                \int drdr' r^2 r'^2  ~phi_i1(r) ~phi_i2(r)  r_<^l/r_>^(l+1)  g_l(r')
-                G(l1,l2,l,m1,m2,m)  2sqrt(pi) G(l3,l,0,m3,m,0)
-                where L = (l3,m3)
-        '''
-        # TODO
-        from pysbt import GauntTable
-
-        L    = self.lmidx
-        i1i2 = np.array(self.ilm)
-        lmax = self.proj_l.max() * 2 + 1
-        npro = self.proj_l.size
-
-        ## r_< and r_>
-        r = self.rgrid
-        r_l = np.minimum(r[:, None], r[None, :])
-        r_g = np.maximum(r[:, None], r[None, :])
-
-        ## gl(r) and gl(r')
-        glr = np.array([[self.gl[l](rp)
-                         for rp in r]
-                        for l in range(lmax)
-                        ])
-
-        ## radial part
-        ## \int drdr' 4pi / (2l+1) r^2 r'^2 * ~phi_n1(r)* ~phi_n2(r)*  (r_<^l/r_>^(l+1))  g_l(r')
-        radial_integral = np.zeros((npro, npro, lmax, lmax), dtype=float)   # [n1, n2, l3, l]
-        for n1 in range(npro):
-            for n2 in range(npro):
-                for l3 in range(lmax):
-                    for l in range(lmax):
-                        for irp, rprime in enumerate(glr[l,0:self.comp_rmax_idx]):
-                            radial_integral[n1, n2, l3, l] += 4 * np.pi / (2 * l + 1) * (
-                                    self.radial_simp_int(self.paw_ps_wfc[n1,:] * self.paw_ps_wfc[n2,:]  # r^2 ~phi_n1(r) ~phi_n2(r)
-                                                         * r_l[irp,:] ** l / r_g[irp,:] ** (l+1), # r_<^l / r_>^(l+1)
-                                                         inside_comp_rmax=True)
-                                    * rprime ** 2               # r'^2
-                                    * glr[l3,irp]               # g_l(r')
-                                    * self.rad_simp_w[irp])     # simpson rule
-
-        ## assemble integral_phi12_gl
-        integral_phi12_gl = np.zeros((i1i2.shape[0], i1i2.shape[0], L.shape[0]))
-        for [l, m] in L:
-            for i1, [n1, l1, m1] in enumerate(i1i2):
-                for i2, [n2, l2, m2] in enumerate(i1i2):
-                    G12 = GauntTable(l1,l2,l,m1,m2,m)
-                    if np.abs(G12) < 1E-6:
-                        continue
-                    for iL, [l3, m3] in enumerate(L):
-                        G3l = GauntTable(l3,l,0,m3,m,0)
-                        integral_phi12_gl[i1,i2,iL] += radial_integral[n1,n2,l3,l] * 2 * np.sqrt(np.pi) * G12 * G3l
-
-        return integral_phi12_gl
-
-    def get_integral_gl(self):
-        '''
-        ((g_l)) = (g_l | g_l)
-            = sum_l'm' (4pi^2/(2l'+1))
-                \int drdr' r^2 r'^2 g_l(r)  (r_<^l' / r_>^(l'_1))  g_l(r')
-                G(l, l', 0, m, m', 0)^2
-        '''
-        from pysbt import GauntTable
-
-        L    = self.lmidx
-        lmax = self.proj_l.max() * 2 + 1
-
-        ## r_< and r_>
-        r = self.rgrid
-        r_l = np.minimum(r[:, None], r[None, :])
-        r_g = np.maximum(r[:, None], r[None, :])
-
-        ## gl(r) and gl(r')
-        glr = np.array([[self.gl[l](rp)
-                         for rp in r]
-                        for l in range(lmax)
-                        ])
-
-        integral_gl = np.zeros(L.size, dtype=float)
-        for iL1, (l1, m1) in enumerate(L):
-            for iL2, (l2, m2) in enumerate(L):
-                Gl1l2 = GauntTable(l1, l2, 0, m1, m2, 0)
-                if np.abs(Gl1l2) < 1E-6:
-                    continue
-                for irp, rprime in enumerate(self.rgrid[0:self.comp_rmax_idx]):
-                    # integrate dr first
-                    integral_gl[l1] += 4 * np.pi / (2 * l2 + 1) * (
-                            self.radial_simp_int(r ** 2 * rprime ** 2
-                                                 * r_l[irp,:] ** (l2) / r_g[irp,:] ** (l2 + 1)
-                                                 * glr[l1,:] * glr[l1,irp])
-                            ) * Gl1l2 ** 2 * self.rad_simp_w[irp]   # simpson's rule
-
-        return integral_gl
-
-    def get_DeltaC_1234(self):
-        '''
-        DeltaC_i1i2i3i4 = 1/2 [(phi_i1 phi_i2 | phi_i3 phi_i4) - (~phi_i1 ~phi_i2 | ~phi_i3 ~phi_i4)]
-            - sum_L [
-                1/2 Delta_Li1i2 (~phi_i1 ~phi_i2 | g_l)
-                + 1/2 Delta_Li3i4 (~phi_i3 ~phi_i4 | g_l)
-                + Delta_Li1i2 ((g_l)) Delta_Li3i4
-            ]
-        '''
-        L    = self.lmidx
-        i1i2 = np.array(self.ilm)
-
-        Delta_Li1i2       = self.get_Delta_Li1i2()
-        integral_phi12_gl = self.get_integral_phi12_gl()
-        integral_gl       = self.get_integral_gl()
-
-        first_term  = 0.5 * (self.get_integral_1234(use_ps_wav=False) - self.get_integral_1234(use_ps_wav=True))
-        second_term = np.zeros((i1i2.shape[0], i1i2.shape[0], i1i2.shape[0], i1i2.shape[0]), dtype=float)
-        for i1, [n1, l1, m1] in enumerate(i1i2):
-            for i2, [n2, l2, m2] in enumerate(i1i2):
-                for i3, [n3, l3, m3] in enumerate(i1i2):
-                    for i4, [n4, l4, m4] in enumerate(i1i2):
-                        for iL, [l, m] in enumerate(L):
-                            second_term[i1, i2, i3, i4] += 0.5 * (
-                                Delta_Li1i2[iL, i1, i2] * integral_phi12_gl[i1, i2, iL] +
-                                Delta_Li1i2[iL, i3, i4] + integral_phi12_gl[i3, i4, iL]
-                            ) + Delta_Li1i2[iL, i1, i2] * integral_gl[iL] * Delta_Li1i2[iL, i3, i4]
-
-        ## V = 1/(4pi*e0) * e^2/r
-        ## 4pi*e0 = e^2/(a0*Eh) where a0 is the Bohr radius
-        ## Thus 1/(4pi*e0) = a0*Eh/e^2
-        ##      a0 / Angstrom = 0.529177...
-        ##      Eh = 27.2114... eV
-        ##      e^2 vanished with (rho_12|rho_34)
-
-        return (first_term - second_term) * BOHR2ANGSTROM * EHARTREE
-        pass
 
 
 class nonlr(object):
@@ -1440,10 +1083,10 @@ class radial2grid(object):
 
 if __name__ == '__main__':
     import time
-    # xx = open('examples/projectors/lreal_true/potcar.mo').read()
+    xx = open('examples/projectors/lreal_true/potcar.mo').read()
 
     t0 = time.time()
-    # ps = pawpotcar(xx)
+    ps = pawpotcar(xx)
 
     # t1 = time.time()
     # ps.csplines()
@@ -1456,13 +1099,4 @@ if __name__ == '__main__':
     # print(ps)
     # print(ps.paw_ae_wfc[1][-1])
 
-    # ps.plot()
-
-    pot = pawpotcar(potfile="POTCAR")
-    # Delta_Li1i2       = pot.get_Delta_Li1i2()
-    # integral_1234     = pot.get_integral_1234()
-    # integral_gl       = pot.get_integral_gl()
-    # integral_phi12_gl = pot.get_integral_phi12_gl()
-    DeltaC_1234       = pot.get_DeltaC_1234()
-    t1 = time.time()
-    print(t1 - t0)
+    ps.plot()
