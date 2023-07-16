@@ -250,7 +250,8 @@ class pawpotcar(object):
              ae wavefunction
         '''
         data = datastr.strip().split('\n')
-        nmax = int(data[0].split()[0])
+        nmax, rmax = data[0].split()[0:2]
+        nmax = int(nmax)
         grid_start_idx = data.index(" grid") + 1
 
         core_data = np.array([
@@ -262,6 +263,8 @@ class pawpotcar(object):
         # number of projectors
         nproj = self.proj_l.size
 
+        # compensation charge radius
+        self.rcomp = float(rmax)
         # core region logarithmic radial grid
         self.rgrid = core_data[0]
         # core region all-electron potential
@@ -320,7 +323,7 @@ class pawpotcar(object):
             self.rad_simp_w[ii-1] = H * self.rgrid[ii-1] * 4. / 3.
             self.rad_simp_w[ii-2] = H * self.rgrid[ii-2] / 3.
 
-    def radial_simp_int(self, f):
+    def radial_simp_int(self, f, inside_rcomp=False):
         '''
         Simpson integration of a function on the logarithmic radial grid.
         '''
@@ -328,7 +331,11 @@ class pawpotcar(object):
             self.set_simpi_weight()
         f = np.asarray(f)
 
-        return np.sum(self.rad_simp_w * f)
+        if inside_rcomp:
+            idx = self.rcomp_idx
+            return np.sum(self.rad_simp_w[0:idx] * f[0:idx])
+        else:
+            return np.sum(self.rad_simp_w * f)
 
     def get_nablaij(self, lreal: bool=True, lforce: bool=False, kmax=200):
         '''
@@ -531,6 +538,14 @@ class pawpotcar(object):
             ]
 
         return self._ilm
+
+    @property
+    def rcomp_idx(self):
+        if not hasattr(self, '_rcomp_idx'):
+            idx = np.searchsorted(self.rgrid, self.rcomp)
+            self._rcomp_idx = idx
+
+        return self._rcomp_idx
 
     def plot(self):
         '''
