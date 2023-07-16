@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 import numpy as np
 from numpy.fft import fftn, ifftn
-from vasp_constant import TPI, AUTOA, RYTOEV
+from vasp_constant import TPI, AUTOA, RYTOEV, EDEPS
 from vaspwfc import vaspwfc
 from paw import pawpotcar
+from pysbt import GauntTable
 
 
 class PAWCoulombIntegral(pawpotcar):
@@ -174,7 +175,6 @@ class PAWCoulombIntegral(pawpotcar):
 
         Returns: Delta_Li1i2
         """
-        from pysbt import GauntTable
 
         L    = self.lmidx
         i1i2 = np.array(self.ilm)
@@ -217,7 +217,6 @@ class PAWCoulombIntegral(pawpotcar):
                                                                      >
         Returns an array that enumerates all (12|34), [i1,i2,i3,i4]
         """
-        from pysbt import GauntTable
 
         L    = self.lmidx
         i1i2 = np.array(self.ilm)
@@ -290,7 +289,6 @@ class PAWCoulombIntegral(pawpotcar):
               i3 = (n3, l3, m3)
               i4 = (n4, l4, m4)
         '''
-        from pysbt import GauntTable
 
         L    = self.lmidx
         i1i2 = np.array(self.ilm)
@@ -360,7 +358,6 @@ class PAWCoulombIntegral(pawpotcar):
                                                  r
                                                   >
         '''
-        from pysbt import GauntTable
 
         L    = self.lmidx
         lmax = self.proj_l.max() * 2 + 1
@@ -435,17 +432,13 @@ class PWCoulombIntegral(vaspwfc):
     def density_matrix(self, m: int, n: int):
         '''
               ⌠     *           iGr
-        uₘₙ = ⎮ dr ϕₘ(r) ϕₙ(r) e
+        Sₘₙ = ⎮ dr ϕₘ(r) ϕₙ(r) e
               ⌡
         '''
         um = self.wfc_r(ispin=1, ikpt=1, iband=m, ngrid=self._ngrid, norm=False)
         un = self.wfc_r(ispin=1, ikpt=1, iband=n, ngrid=self._ngrid, norm=False)
-        umun = um.conj() * un
-
-        print("|umun| = {}".format(np.linalg.norm(umun)))
-        print("fftn(umun) = {}".format(np.linalg.norm(fftn(umun, norm='ortho'))))
-
-        return fftn(umun, norm='ortho')
+        Smn = um.conj() * un
+        return fftn(Smn)
 
     @property
     def gvectors_cart(self):
@@ -454,11 +447,11 @@ class PWCoulombIntegral(vaspwfc):
             fx[self._ngrid[0] // 2 + 1:] -= self._ngrid[0]
             fy[self._ngrid[1] // 2 + 1:] -= self._ngrid[1]
             fz[self._ngrid[2] // 2 + 1:] -= self._ngrid[2]
-            gz, gy, gx = np.array(
-                    np.meshgrid(fz, fy, fx, indexing='ij')
+            gx, gy, gz = np.array(
+                    np.meshgrid(fx, fy, fz, indexing='ij')
                     ).reshape((3, -1))
             kgrid = np.array([gx, gy, gz], dtype=float).T
-            self._gvectors_cart = kgrid @ self._Bcell * TPI
+            self._gvectors_cart = kgrid @ (self._Bcell * TPI)
         return self._gvectors_cart
 
     def coulomb_integral(self, m: int, n: int, p: int, q: int):
@@ -467,21 +460,18 @@ class PWCoulombIntegral(vaspwfc):
         (mn|pq) = ⎮ dr₁ dr₂ ψₘ(r₁) ψₙ(r₁) ─── ψₚ(r₂) ψ (r₂)
                   ⌡                       r₁₂         q
         '''
-        denmat_mn = self.density_matrix(m, n).flatten().conj()
-        denmat_pq = self.density_matrix(p, q).flatten()
-        gvec      = np.linalg.norm(self.gvectors_cart, axis=-1)
+        rhomn = self.density_matrix(m, n).flatten().conj()
+        rhopq = self.density_matrix(p, q).flatten()
+        Gsqr  = np.linalg.norm(self.gvectors_cart, axis=-1) ** 2
 
-        integral = 0.0 + 0.0j
-        for i in range(denmat_mn.size):
-            if gvec[i] < 1E-6:
-                continue
-            integral += denmat_mn[i] * denmat_pq[i] / gvec[i] ** 2
-
-        integral *= AUTOA * RYTOEV / np.pi**2
+        # First G is 0, can be filtered out
+        integral = np.sum(rhomn[1:] * rhopq[1:] / Gsqr[1:]) * (EDEPS / self._Omega / TPI**2)
         return integral
 
 
 if '__main__' == __name__:
-    # pawci = PAWCoulombIntegral(potfile='examples/projectors/lreal_false/POTCAR')
-    # pwci  = PWCoulombIntegral(fnm='examples/projectors/lreal_false/WAVECAR')
+    pawci = PAWCoulombIntegral(potfile='examples/projectors/lreal_false/POTCAR')
+    pwci  = PWCoulombIntegral(fnm='examples/projectors/lreal_false/WAVECAR')
+    print(pwci.coulomb_integral(9, 10, 11, 12))
+    print(pwci.coulomb_integral(9, 9, 9, 9))
     pass
