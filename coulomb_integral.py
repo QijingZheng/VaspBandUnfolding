@@ -99,9 +99,12 @@ class PAWCoulombIntegral(pawpotcar):
 
         def find_alpha(R: float, q: [float, float], l: int) -> [float, float]:
             """
-            Returns a₁ and a₂ that satisfie
-
+            Returns a₁ and a₂ that satisfis
             gₗ(r) = a₁ jₗ(q₁ r) + a₂ jₗ(q₂ r)       (61)
+
+            Reference:
+            - "From ultrasoft pseudopotentials to the projector augmented-wave method"
+                https://journals.aps.org/prb/abstract/10.1103/PhysRevB.59.1758
             """
             def glr_int(r: float, q: float, l: int) -> float:
                 """
@@ -115,7 +118,7 @@ class PAWCoulombIntegral(pawpotcar):
                     ⎮  dr jₗ(q * r) rˡ⁺²
                     ⌡₀
                 """
-                GAUSSIAN_QUADRATURE_ORDER = 32
+                GAUSSIAN_QUADRATURE_ORDER = 32      # copied from radial.F AUG_SETQ
                 val, err = quadrature(
                         lambda x: spherical_jn(l, q * x) * x**(l+2),
                         0.0, r, maxiter=GAUSSIAN_QUADRATURE_ORDER)
@@ -442,6 +445,13 @@ class PWCoulombIntegral(vaspwfc):
 
     @property
     def gvectors_cart(self):
+        '''
+        G = 2pi * fx * Bcell
+        G vectors in cartesian coordinate
+
+        @out:
+            - G in 1/Angstrom
+        '''
         if not hasattr(self, '_gvectors_cart'):
             fx, fy, fz = [np.arange(n, dtype=int) for n in self._ngrid]
             fx[self._ngrid[0] // 2 + 1:] -= self._ngrid[0]
@@ -459,19 +469,34 @@ class PWCoulombIntegral(vaspwfc):
                   ⌠                 *      1   *
         (mn|pq) = ⎮ dr₁ dr₂ ψₘ(r₁) ψₙ(r₁) ─── ψₚ(r₂) ψ (r₂)
                   ⌡                       r₁₂         q
+
+                    1   ⌠     *   4π
+                = ───── ⎮ dq ρ   ──── ρ
+                  (2π)³ ⌡     mn |q|²  pq
+
+        where ρₘₙ is also known as Sₘₙ calculated by `density_matrix`
+
+        WARNING: Only states at Gamma point is supported for now
+
+        @in:
+            - m,n,p,q: index of states at Gamma point
+        @out:
+            - Coulomb Integral, in eV
         '''
         rhomn = self.density_matrix(m, n).flatten().conj()
         rhopq = self.density_matrix(p, q).flatten()
         Gsqr  = np.linalg.norm(self.gvectors_cart, axis=-1) ** 2
 
         # First G is 0, can be filtered out
+        # Here EDEPS / self._Omega / TPI**2 is copied from  pot.F subroutine POTHAR
+        # which transforms the  unit to  eV
         integral = np.sum(rhomn[1:] * rhopq[1:] / Gsqr[1:]) * (EDEPS / self._Omega / TPI**2)
         return integral
 
 
 if '__main__' == __name__:
-    pawci = PAWCoulombIntegral(potfile='examples/projectors/lreal_false/POTCAR')
-    pwci  = PWCoulombIntegral(fnm='examples/projectors/lreal_false/WAVECAR')
-    print(pwci.coulomb_integral(9, 10, 11, 12))
-    print(pwci.coulomb_integral(9, 9, 9, 9))
+    # pawci = PAWCoulombIntegral(potfile='examples/projectors/lreal_false/POTCAR')
+    # pwci  = PWCoulombIntegral(fnm='examples/projectors/lreal_false/WAVECAR')
+    # print(pwci.coulomb_integral(9, 10, 11, 12))
+    # print(pwci.coulomb_integral(9, 9, 9, 9))
     pass
