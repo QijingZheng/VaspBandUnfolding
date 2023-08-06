@@ -281,6 +281,7 @@ class PAWCoulombIntegral(pawpotcar):
           i₁  i₂    L    ⌡         i₁     i₂    |r-r′|  L
                                        rˡ
 
+                                                                rˡ
                          ⎲   4π  ⌠                               <                                ┌─┐
                        = ⎳  ──── ⎮ dr dr′ r² r′² ϕ̃  (r) ϕ̃  (r) ──── g (r′) ⋅G(l₁,l₂,l,m₁,m₂,m) ⋅2╲│π  G(l₃,l,0,m₃,m,0)
                          ˡᵐ 2l+1 ⌡                i₁     i₂    rˡ⁺¹  L
