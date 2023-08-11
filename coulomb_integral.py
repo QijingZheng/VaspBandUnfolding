@@ -3,8 +3,10 @@ import numpy as np
 from numpy.fft import fftn, ifftn
 from vasp_constant import TPI, AUTOA, RYTOEV, EDEPS
 from vaspwfc import vaspwfc
-from paw import pawpotcar
+from paw import (pawpotcar,
+                 nonlq)
 from pysbt import GauntTable
+from ase.io.vasp import read_vasp
 
 
 class PAWCoulombIntegral(pawpotcar):
@@ -20,9 +22,9 @@ class PAWCoulombIntegral(pawpotcar):
         https://arxiv.org/abs/0910.1921.pdf
     '''
 
-    def __init__(self, potfile="POTCAR"):
+    def __init__(self, potfile=None, potstr=None):
         # Init pawpotcar class
-        super().__init__(potfile=potfile)
+        super().__init__(potfile=potfile, potstr=potstr)
 
         # set the compensation charge function
         self.set_comp_function()
@@ -425,7 +427,7 @@ class PAWCoulombIntegral(pawpotcar):
         ##      Eh = 27.2114... eV
         ##      e^2 vanished with (rho_12|rho_34)
 
-        return (first_term - second_term) * BOHR2ANGSTROM * EHARTREE
+        return (first_term - second_term) * AUTOA * 2 * RYTOEV
 
 
 class PWCoulombIntegral(vaspwfc):
@@ -495,9 +497,58 @@ class PWCoulombIntegral(vaspwfc):
         return integral
 
 
+class CoulombIntegral(object):
+    '''
+    '''
+    def __init__(self, poscar="POSCAR", wavecar="WAVECAR", potcar="POTCAR"):
+        self.pwci   = PWCoulombIntegral(fnm=wavecar)
+        self.atoms  = read_vasp(poscar)
+        self.pawci  = [PAWCoulombIntegral(potstr=potstr) for potstr in
+                       open(potcar).read().split('End of Dataset')[:-1]]
+        self.DeltaC = [pp.get_DeltaC_1234() for pp in self.pawci]
+        self.qproj  = nonlq(self.atoms, self.pwci._encut, self.pawci)
+
+        atom_cnts   = [int(x) for x in open(poscar).readlines()[6].split()]
+        self.element_idx = [idx for (i,cnt) in enumerate(atom_cnts)
+                                for idx in [i]*cnt]
+
+        # generate atom-ilm index
+        ailm = [(ia,) + ilm for ia in self.element_idx
+                            for ilm in self.pawci[ia].ilm]
+        self.ailm = ailm
+
+    def coulomb_integral(self, m:int, n:int, p:int, q:int):
+        ci_paw = 0.0
+        for (ia,ip) in enumerate(self.element_idx):
+            beta_njk = [None, None, None, None]
+
+            # calculate projection <p | psi>
+            for (ibeta, iband) in enumerate([m, n, p, q]):
+                Cg = self.pwci.readBandCoeff(ispin=1, ikpt=1, iband=iband, norm=False)
+                beta_njk[ibeta] = self.qproj.proj(Cg, whichatom=ia)
+                pass
+            pass
+
+            # ci_paw = sum_{i1,i2,i3,i4}^a  p1 * p2 * DeltaC^a * p3 * p4
+            for i1,p1 in enumerate(beta_njk[0]):
+                for i2,p2 in enumerate(beta_njk[1]):
+                    for i3,p3 in enumerate(beta_njk[2]):
+                        for i4,p4 in enumerate(beta_njk[3]):
+                            ci_paw += p1 * p2.conj() * self.DeltaC[ip][i1,i2,i3,i4] * p3.conj() * p4
+
+        ci_pw = self.pwci.coulomb_integral(m, n, p, q)
+        K_mnpq = ci_pw + 2 * ci_paw
+        return (K_mnpq, ci_pw, ci_paw)
+
+    pass
+
+
 if '__main__' == __name__:
     # pawci = PAWCoulombIntegral(potfile='examples/projectors/lreal_false/POTCAR')
     # pwci  = PWCoulombIntegral(fnm='examples/projectors/lreal_false/WAVECAR')
     # print(pwci.coulomb_integral(9, 10, 11, 12))
     # print(pwci.coulomb_integral(9, 9, 9, 9))
+
+    prefix = 'examples/projectors/lreal_false/'
+    ci = CoulombIntegral(poscar=prefix+'POSCAR', wavecar=prefix+'WAVECAR', potcar=prefix+'POTCAR')
     pass
