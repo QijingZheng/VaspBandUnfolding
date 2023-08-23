@@ -193,8 +193,8 @@ class PAWCoulombIntegral(pawpotcar):
                 )
 
         gl = np.array(gl)
-        gl[:, rcomp_idx+1:] = 0
-        self.gl = np.gl
+        gl[:, self.rcomp_idx:] = 0
+        self.gl = gl
 
     @property
     def lmidx(self):
