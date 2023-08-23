@@ -29,6 +29,52 @@ class PAWCoulombIntegral(pawpotcar):
         # set the compensation charge function
         self.set_comp_function()
 
+
+    def get_coulomb_kernel(self):
+        '''
+        Returns the coulomb kernel:
+
+              rˡ
+         4π    <
+        ──── ────
+        2l+1 rˡ⁺¹
+              >
+
+        where   r< = min(r, r')
+                r> = max(r, r')
+        '''
+
+        if hasattr(self, 'coulomb_kernel'):
+            return self.coulomb_kernel
+        
+        r   = self.rgrid
+        r_l = np.minimum(r[:, None], r[None, :])
+        r_g = np.maximum(r[:, None], r[None, :])
+
+        lmax = self.lmax + 1
+        ngrid = r.size
+
+        coulomb_kernel = np.zeros((lmax, ngrid, ngrid))
+        for l in range(lmax):
+            coulomb_kernel[l,:] = r_l**l / r_g**(l+1) * 4 * np.pi / (2*l + 1)
+
+        self.coulomb_kernel = coulomb_kernel
+        return self.coulomb_kernel
+
+
+    # def get_glr(self):
+        # if hasattr(self, 'glr'):
+            # return self.glr
+
+        # lmax = self.proj_l.max() * 2 + 1
+        # r = self.rgrid
+        # glr = np.array([self.gl[l](r)
+                        # for l in range(lmax)])
+
+        # self.glr = glr
+        # return self.glr
+
+
     def set_comp_function(self):
         '''
         Set the compensation charge function gₗ(r)
@@ -141,12 +187,14 @@ class PAWCoulombIntegral(pawpotcar):
         for l in range(lmax):
             q = np.array(find_q(l)) / self.rcomp
             a = find_alpha(self.rcomp, q, l)
-            gl.append(lambda r: (
-                a[0] * spherical_jn(l, q[0] * r) +
-                a[1] * spherical_jn(l, q[1] * r)
-                ))
+            gl.append(
+                a[0] * spherical_jn(l, q[0] * self.rgrid) +
+                a[1] * spherical_jn(l, q[1] * self.rgrid)
+                )
 
-        self.gl = gl
+        gl = np.array(gl)
+        gl[:, rcomp_idx+1:] = 0
+        self.gl = np.gl
 
     @property
     def lmidx(self):
@@ -181,6 +229,9 @@ class PAWCoulombIntegral(pawpotcar):
         Returns: Delta_Li1i2
         """
 
+        if hasattr(self, 'Delta_Li1i2'):
+            return self.Delta_Li1i2
+
         L    = self.lmidx
         i1i2 = np.array(self.ilm)
         lmax = self.proj_l.max() * 2 + 1
@@ -188,7 +239,7 @@ class PAWCoulombIntegral(pawpotcar):
 
         ## Raidal part \int dr r^(l+2) (phi_n1^ae(r) * phi_n2^ae(r) - phi_n1^ps(r) * phi_n2^ps(r))
         ## Note that pwav_ae = phi_n(r) / r as defined in POTCAR
-        radial_integral = np.zeros((lmax, npro, npro))
+        radial_integral = np.zeros((lmax, npro, npro), dtype=float)
         for l in range(lmax):
             rpower = self.rgrid ** l    ## r^l
             for n1 in range(npro):
@@ -207,6 +258,7 @@ class PAWCoulombIntegral(pawpotcar):
                 for i2, [n2, l2, m2] in enumerate(i1i2):
                     Delta_Li1i2[iL, i1, i2] = radial_integral[l, n1, n2] * GauntTable(l1, l2, l, m1, m2, m)
 
+        self.Delta_Li1i2 = Delta_Li1i2
         return Delta_Li1i2
 
     def get_integral_1234(self, use_ps_wav=False):
@@ -222,6 +274,13 @@ class PAWCoulombIntegral(pawpotcar):
                                                                      >
         Returns an array that enumerates all (12|34), [i1,i2,i3,i4]
         """
+
+        if use_ps_wav:
+            if hasattr(self, 'integral_1234_ps'):
+                return self.integral_1234_ps
+        else:
+            if hasattr(self, 'integral_1234_ae'):
+                return self.integral_1234_ae
 
         L    = self.lmidx
         i1i2 = np.array(self.ilm)
@@ -274,6 +333,10 @@ class PAWCoulombIntegral(pawpotcar):
                                     * G12 * G34
                                     )
 
+        if use_ps_wav:
+            self.integral_1234_ps = integral_1234
+        else:
+            self.integral_1234_ae = integral_1234
         return integral_1234
 
     def get_integral_phi12_gl(self):
@@ -296,6 +359,9 @@ class PAWCoulombIntegral(pawpotcar):
               i4 = (n4, l4, m4)
         '''
 
+        if hasattr(self, 'integral_phi12_gl'):
+            return self.integral_phi12_gl
+
         L    = self.lmidx
         i1i2 = np.array(self.ilm)
         lmax = self.proj_l.max() * 2 + 1
@@ -307,10 +373,11 @@ class PAWCoulombIntegral(pawpotcar):
         r_g = np.maximum(r[:, None], r[None, :])
 
         ## gl(r) and gl(r')
-        glr = np.array([[self.gl[l](rp)
-                         for rp in r]
-                        for l in range(lmax)
-                        ])
+        # glr = np.array([[self.gl[l]
+                         # for rp in r]
+                        # for l in range(lmax)
+                        # ])
+        glr = self.gl
 
         ## radial part
         ## \int drdr' 4pi / (2l+1) r^2 r'^2 * ~phi_n1(r)* ~phi_n2(r)*  (r_<^l/r_>^(l+1))  g_l(r')
@@ -340,6 +407,7 @@ class PAWCoulombIntegral(pawpotcar):
                         G3l = GauntTable(l3,l,0,m3,m,0)
                         integral_phi12_gl[i1,i2,iL] += radial_integral[n1,n2,l3,l] * 2 * np.sqrt(np.pi) * G12 * G3l
 
+        self.integral_phi12_gl = integral_phi12_gl
         return integral_phi12_gl
 
     def get_integral_gl(self):
@@ -365,6 +433,9 @@ class PAWCoulombIntegral(pawpotcar):
                                                   >
         '''
 
+        if hasattr(self, 'integral_gl'):
+            return self.integral_gl
+
         L    = self.lmidx
         lmax = self.proj_l.max() * 2 + 1
 
@@ -374,10 +445,11 @@ class PAWCoulombIntegral(pawpotcar):
         r_g = np.maximum(r[:, None], r[None, :])
 
         ## gl(r) and gl(r')
-        glr = np.array([[self.gl[l](rp)
-                         for rp in r]
-                        for l in range(lmax)
-                        ])
+        # glr = np.array([[self.gl[l](rp)
+                         # for rp in r]
+                        # for l in range(lmax)
+                        # ])
+        glr = self.gl
 
         integral_gl = np.zeros(L.size, dtype=float)
         for iL1, (l1, m1) in enumerate(L):
@@ -393,6 +465,7 @@ class PAWCoulombIntegral(pawpotcar):
                                                  * glr[l1,:] * glr[l1,irp])
                             ) * Gl1l2 ** 2 * self.rad_simp_w[irp]   # simpson's rule
 
+        self.integral_gl = integral_gl
         return integral_gl
 
     def get_DeltaC_1234(self):
@@ -401,6 +474,10 @@ class PAWCoulombIntegral(pawpotcar):
         ΔC         = ─ [(ϕ  ϕ   | ϕ  ϕ  ) - (ϕ̃   ϕ̃   | ϕ̃   ϕ̃  )] - ⎳ [─ Δ      (ϕ̃   ϕ̃   | g ) + ─ Δ      (ϕ̃   ϕ̃   | g ) + Δ      ((g )) Δ     ]
           i₁i₂i₃i₄   2    i₁ i₂    i₃ i₄      i₁  i₂    i₃  i₄     ᴸ  2  Li₁i₂   i₁  i₂    L    2  Li₃i₄   i₃  i₄    L     Li₁i₂    L    Li₃i₄
         '''
+
+        if hasattr(self, 'DeltaC_1234'):
+            return self.DeltaC_1234
+
         L    = self.lmidx
         i1i2 = np.array(self.ilm)
 
@@ -417,7 +494,7 @@ class PAWCoulombIntegral(pawpotcar):
                         for iL, [l, m] in enumerate(L):
                             second_term[i1, i2, i3, i4] += 0.5 * (
                                 Delta_Li1i2[iL, i1, i2] * integral_phi12_gl[i1, i2, iL] +
-                                Delta_Li1i2[iL, i3, i4] + integral_phi12_gl[i3, i4, iL]
+                                Delta_Li1i2[iL, i3, i4] * integral_phi12_gl[i3, i4, iL]
                             ) + Delta_Li1i2[iL, i1, i2] * integral_gl[iL] * Delta_Li1i2[iL, i3, i4]
 
         ## V = 1/(4pi*e0) * e^2/r
@@ -427,7 +504,8 @@ class PAWCoulombIntegral(pawpotcar):
         ##      Eh = 27.2114... eV
         ##      e^2 vanished with (rho_12|rho_34)
 
-        return (first_term - second_term) * AUTOA * 2 * RYTOEV
+        self.DeltaC_1234 = (first_term - second_term) * AUTOA * 2 * RYTOEV
+        return self.DeltaC_1234
 
 
 class PWCoulombIntegral(vaspwfc):
