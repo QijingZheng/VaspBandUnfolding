@@ -390,7 +390,7 @@ class PAWCoulombIntegral(pawpotcar):
                             radial_integral[n1, n2, l3, l] += 4 * np.pi / (2 * l + 1) * (
                                     self.radial_simp_int(self.paw_ps_wfc[n1,:] * self.paw_ps_wfc[n2,:]  # r^2 ~phi_n1(r) ~phi_n2(r)
                                                          * r_l[irp,:] ** l / r_g[irp,:] ** (l+1), # r_<^l / r_>^(l+1)
-                                                         inside_rcomp=True)
+                                                         inside_rcomp=False)
                                     * rprime ** 2               # r'^2
                                     * glr[l3,irp]               # g_l(r')
                                     * self.rad_simp_w[irp])     # simpson rule
