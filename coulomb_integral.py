@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
 import numpy as np
 from numpy.fft import fftn, ifftn
-from vasp_constant import TPI, AUTOA, RYTOEV, EDEPS
+from vasp_constant import (
+        PI,
+        TPI,
+        AUTOA,
+        RYTOEV,
+        EDEPS
+        )
 from vaspwfc import vaspwfc
 from paw import (pawpotcar,
                  nonlq)
@@ -542,7 +548,7 @@ class PWCoulombIntegral(vaspwfc):
                     np.meshgrid(fx, fy, fz, indexing='ij')
                     ).reshape((3, -1))
             kgrid = np.array([gx, gy, gz], dtype=float).T
-            self._gvectors_cart = kgrid @ (self._Bcell * TPI)
+            self._gvectors_cart = kgrid @ self._Bcell
         return self._gvectors_cart
 
     def coulomb_integral(self, m: int, n: int, p: int, q: int):
