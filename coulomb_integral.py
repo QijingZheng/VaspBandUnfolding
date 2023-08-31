@@ -548,6 +548,8 @@ class PWCoulombIntegral(vaspwfc):
                     np.meshgrid(fx, fy, fz, indexing='ij')
                     ).reshape((3, -1))
             kgrid = np.array([gx, gy, gz], dtype=float).T
+
+            ## Here gvectors_cart is not multiplied with TPI, consistent with CHTOT from POTHAR@pot.F
             self._gvectors_cart = kgrid @ self._Bcell
         return self._gvectors_cart
 
