@@ -193,6 +193,16 @@ class pawpotcar(object):
 
         # element of the potcar
         self.element = head[0].split()[1]
+
+        # valent charges of the potcar
+        self.zval = float(head[1])
+
+        # total charge of the nuclei
+        iconfiguration = head.index('   Atomic configuration') + 1
+        nentries = int(head[iconfiguration].split()[0])
+        self.Z = sum([float(l.split()[-1])
+                 for l in head[iconfiguration+2 : iconfiguration+2+nentries]])
+
         # maximal G for reciprocal non local projectors
         self.proj_gmax = float(head[-1].split()[0])
 
