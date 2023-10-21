@@ -5,7 +5,6 @@ from ase.io.vasp import read_vasp
 
 from vasp_constant import (
         TPI,
-        HARTREE,
         EDEPS
         )
 from vaspwfc import vaspwfc
@@ -120,7 +119,7 @@ class CoulombIntegral(object):
             ci_paw += Pij @ self.M_pp[ip] @ Pkl
 
         ci_pw = self.pwci.coulomb_integral(m, n, p, q)
-        K_mnpq = ci_pw + 2 * ci_paw * HARTREE
+        K_mnpq = ci_pw + 2 * ci_paw
         return (K_mnpq, ci_pw, ci_paw)
 
     pass

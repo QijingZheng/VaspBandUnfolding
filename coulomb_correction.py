@@ -5,6 +5,7 @@ import numpy.typing as npt
 from typing import List
 from scipy.special import spherical_jn as jn
 from paw import pawpotcar
+from vasp_constant import HARTREE
 
 '''
 Mostly copied from GPAW
@@ -677,7 +678,7 @@ class PAWCoulombCorrection:
         #     self.calculate_coulomb_corrections(
         #         self.wn_lqg, self.wnt_lqg, self.wg_lg, self.wnc_g, self.wmct_g
         #     )
-        return self.M_p, self.M_pp
+        return self.M_p * HARTREE, self.M_pp * HARTREE
     pass
 
 
