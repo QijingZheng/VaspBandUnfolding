@@ -34,8 +34,8 @@ class vasp_ae_wfc(object):
         '''
         '''
 
-        if wavecar._lsoc:
-            raise NotImplementedError('Non-collinear version currently not supported!')
+        # if wavecar._lsoc:
+        #     raise NotImplementedError('Non-collinear version currently not supported!')
 
         # wavecar storing the pseudo-wavefunctions
         self._pswfc = wavecar
@@ -535,7 +535,7 @@ class vasp_ae_wfc(object):
         for ii in range(3):
             moment_mat_oc[ii] = beta_nk.conj() @ (self.get_nablaijs()[ii] @ beta_mk)
             if self._pswfc._lsoc:
-                moment_mat_oc[ii] += beta_nk2.conj() @ (self.get_nablaijs() @ beta_mk2)
+                moment_mat_oc[ii] += beta_nk2.conj() @ (self.get_nablaijs()[ii] @ beta_mk2)
 
         return  moment_mat_ps - 1j*moment_mat_oc
 
