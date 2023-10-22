@@ -1,0 +1,48 @@
+   SYSTEM = Hydrogen
+Startparameter for this Run:
+   NWRITE =    3        default is 2
+   ISTART =    0        0-new  1-cont  2-same basic set
+   ICHARG =    2        charge: 1-file 2-atom 10-const
+   LCHARG =    .TRUE.  Write down charge densities or not
+   LWAVE  =    .TRUE.  Write down wavefunctions or not
+#  LVTOT  =    .TRUE.   Write LOCPOT, total local potential
+#  LVHAR  =    .TRUE.   Write LOCPOT, Hartree potential only
+#  LELF   =    .TRUE.   Write electronic localiz. function (ELF)
+   ISYM   =    0        default is 1
+   NCORE  =    1
+   AMIX   =   0.4       default 0.4 not converge first try Amix=0.1 Bmix=0.01 
+   AMIN   =   0.1       default 0.1 if still not converge try Bmix=3.0 Amin=0.01 
+   BMIX   =   1.0       default 1.0 
+Electronic Relaxation
+   PREC   =    NORMAL
+   ENCUT  =    300      kinetic energy cutoff, default is taken from POTCAR file
+   ISPIN  =    1        (1 = off, 2 =on spin polarization)
+   NBANDS =    20
+#  MAGMOM =    12*4    
+#  NELMDL =    -5       negtive only start-configuration;positive for every step
+   NELMIN =    4
+   NELM   =    300      maxmum step number of SCF, default 60
+   EDIFF  =    1E-05    stopping-criterion for ELM, default is 1E-05
+   LREAL  =    Auto
+   ALGO   =    Normal   #IALGO = 38  if meet trouble decrease NSIM
+   NSIM   =    1        #improve preformance
+Ionic Relaxation
+   EDIFFG =   -2E-02    stopping-criterion for ELM, default is 1E-04
+   IBRION =    2        ionic relax: 0=MD, 1=quasi-Newton, 2=CG,5=phonon
+   ISIF   =    2        (2:force=y stress=y ions=y shape=n volume=n), default is 2
+   NSW    =    1800      max number of geometry steps, default 0
+   POTIM  =    0.5
+#  NBLOCK =      1      inner block; Default: 1
+#  KBLOCK =      1      outer block; Default: NSW
+DOS Related values
+   ISMEAR =   0         -1: Fermi smearing, 0: Gaussian smearing, 1..N: Methfessel-Paxton order N ...
+   SIGMA  =   0.05      broadening in eV
+   LORBIT =   11        writting our magnetization
+   NEDOS  =   10000
+   EMIN   =   -30.0     Performing RELAX_STATIC (aleksey) force search for EMIN
+   EMAX   =   45.0      Performing RELAX_STATIC (aleksey)
+
+VDW Related option
+#  IVDW   =   12        DFT-D3 with damped
+
+LNORMALCAR = T

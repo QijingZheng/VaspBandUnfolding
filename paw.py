@@ -193,6 +193,16 @@ class pawpotcar(object):
 
         # element of the potcar
         self.element = head[0].split()[1]
+
+        # valent charges of the potcar
+        self.zval = float(head[1])
+
+        # total charge of the nuclei
+        iconfiguration = head.index('   Atomic configuration') + 1
+        nentries = int(head[iconfiguration].split()[0])
+        self.Z = sum([float(l.split()[-1])
+                 for l in head[iconfiguration+2 : iconfiguration+2+nentries]])
+
         # maximal G for reciprocal non local projectors
         self.proj_gmax = float(head[-1].split()[0])
 
@@ -269,6 +279,10 @@ class pawpotcar(object):
         self.rgrid = core_data[0]
         # core region all-electron potential
         self.paw_aepot = core_data[1]
+        # core charge-density
+        self.aechg = core_data[2]
+        # core charge-density pseudized
+        self.pschg = core_data[7]
         # core region pseudo wavefunction
         self.paw_ps_wfc = core_data[-nproj*2::2, :]
         # core region all-electron wavefunctions
@@ -1083,10 +1097,10 @@ class radial2grid(object):
 
 if __name__ == '__main__':
     import time
-    xx = open('examples/projectors/lreal_true/potcar.mo').read()
+    # xx = open('examples/projectors/lreal_true/potcar.mo').read()
 
     t0 = time.time()
-    ps = pawpotcar(xx)
+    ps = pawpotcar(potfile='examples/projectors/lreal_true/POTCAR')
 
     # t1 = time.time()
     # ps.csplines()
@@ -1099,4 +1113,4 @@ if __name__ == '__main__':
     # print(ps)
     # print(ps.paw_ae_wfc[1][-1])
 
-    ps.plot()
+    # ps.plot()

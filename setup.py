@@ -13,7 +13,7 @@ setup(
     py_modules   = [
         'vasp_constant', 'vaspwfc', 'aewfc',
         'nac', 'unfold', 'procar', 'spinorb',
-        'sph_harm', 'paw', 'ewald'
+        'sph_harm', 'paw', 'ewald', 'coulomb_integral'
     ],
     scripts      = ['bin/wfcplot', 'bin/tdmplot', 'bin/potplot', 'bin/nebplot']
 )

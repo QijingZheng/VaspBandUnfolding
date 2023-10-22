@@ -13,6 +13,7 @@ Physical constants used in VASP
 
 AUTOA    = 0.529177249
 RYTOEV   = 13.605826
+HARTREE  = 27.211386024367243
 CLIGHT   =  137.037          # speed of light in a.u.
 EVTOJ    = 1.60217733E-19
 AMTOKG   = 1.6605402E-27
