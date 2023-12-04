@@ -4,7 +4,10 @@ import os
 import re
 import numpy as np
 from ase.io import read
-from collections import Iterable
+try: # since python 3.10, https://docs.python.org/3/library/collections.abc.html#collections-abstract-base-classes
+    from collections.abc import Iterable
+except ImportError:
+    from collections import Iterable
 
 ############################################################
 
