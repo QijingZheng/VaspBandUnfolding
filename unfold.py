@@ -554,6 +554,42 @@ class unfold():
 
         return self.SW
 
+    def write_sw(self, kpoints, cell, npy=False):
+        '''
+        Export the raw unfolding data either as '.npy' format or normal text
+        file.
+        '''
+
+        assert self.SW is not None, 'Spectral weight must be calculated first!'
+        nspin, nkpts, nbands = self.SW.shape[:3]
+
+        kpoints = np.asarray(kpoints)
+        assert nkpts == kpoints.shape[0]
+
+        kpt_c = np.dot(kpoints, np.linalg.inv(cell).T)
+        kdist = np.r_[0, np.cumsum(
+            np.linalg.norm(
+                np.diff(kpt_c, axis=0),
+                axis=1
+            ))]
+        k0 = np.tile(kdist, (nbands, 1)).T
+
+        if npy:
+            wht = np.zeros((nspin, nkpts, nbands, 3))
+            wht[:,...,0] = k0
+            wht[..., 1:] = self.SW
+            np.save('unfolding_weight.npy', wht)
+        else:
+            tmp = np.swapaxes(self.SW, 1, 2).reshape((nspin, -1, 2))
+
+            wht = [k0.T.flatten()]
+            for ii in range(nspin):
+                for jj in range(2):
+                    wht.append(tmp[ii,...,jj])
+            wht = np.asarray(wht).T
+
+            np.savetxt('unfolding_weight.dat', wht, fmt='%12.6f')
+
     def spectral_function(self, nedos=4000, sigma=0.02):
         '''
         Generate the spectral function
