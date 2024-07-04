@@ -161,11 +161,16 @@ class vaspwfc(object):
         self._WFPrec = self.setWFPrec()
         # the second record
         self._wfc.seek(self._recl)
-        dump = np.fromfile(self._wfc, dtype=np.float64, count=12)
+        # From VASP 5.x on, Fermi energy is also written in this line, hence
+        # change 12 to 13
+        dump = np.fromfile(self._wfc, dtype=np.float64, count=13)
 
-        self._nkpts = int(dump[0])                     # No. of k-points
-        self._nbands = int(dump[1])                     # No. of bands
-        self._encut = dump[2]                          # Energy cutoff
+        # Valid from VASP 5.x on 
+        self._efermi = float(dump[12])
+
+        self._nkpts = int(dump[0])                 # No. of k-points
+        self._nbands = int(dump[1])                # No. of bands
+        self._encut = dump[2]                      # Energy cutoff
         # real space supercell basis
         self._Acell = dump[3:].reshape((3, 3))
         # real space supercell volume
