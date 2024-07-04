@@ -172,7 +172,7 @@ class vaspwfc(object):
         self._nbands = int(dump[1])                # No. of bands
         self._encut = dump[2]                      # Energy cutoff
         # real space supercell basis
-        self._Acell = dump[3:].reshape((3, 3))
+        self._Acell = dump[3:12].reshape((3, 3))
         # real space supercell volume
         self._Omega = np.linalg.det(self._Acell)
         # reciprocal space supercell volume
