@@ -119,10 +119,10 @@ def make_kpath(kbound, nseg=40):
 
 def EBS_scatter(kpts, cell, spectral_weight,
                 atomic_weights=None,
-                atomic_colors=[],
+                atomic_colors=None,
                 eref=0.0,
                 nseg=None, save='ebs_s.png',
-                kpath_label=[],
+                kpath_label=None,
                 factor=20, figsize=(3.0, 4.0),
                 ylim=(-3, 3), show=True,
                 color='b'):
@@ -142,6 +142,11 @@ def EBS_scatter(kpts, cell, spectral_weight,
     import matplotlib.pyplot as plt
 
     mpl.rcParams['axes.unicode_minus'] = False
+
+    if atomic_weights is None:
+        atomic_weights = []
+    if atomic_colors is None:
+        atomic_colors = []
 
     nspin = spectral_weight.shape[0]
     kpt_c = np.dot(kpts, np.linalg.inv(cell).T)
