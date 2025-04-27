@@ -491,7 +491,7 @@ class vaspwfc(object):
     def wfc_r(self, ispin=1, ikpt=1, iband=1,
               gvec=None, Cg=None, ngrid=None,
               rescale=None,
-              norm=False, kr_phase=False, r0=[0.0, 0.0, 0.0]):
+              norm=False, kr_phase=False, r0=None):
         '''
         Obtain the pseudo-wavefunction of the specified KS states in real space
         by performing FT transform on the reciprocal space planewave
@@ -526,6 +526,9 @@ class vaspwfc(object):
                 "Minium FT grid size: (%d, %d, %d)" % \
                 (self._ngrid[0], self._ngrid[1], self._ngrid[2])
 
+        if r0 is None:
+            r0 = [0.0, 0.0, 0.0]
+        
         # By default, the WAVECAR only stores the periodic part of the Bloch
         # wavefunction. In order to get the full Bloch wavefunction, one need to
         # multiply the periodic part with the phase: exp(i k (r + r0). Below, the
