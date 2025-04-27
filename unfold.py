@@ -214,7 +214,7 @@ def EBS_scatter(kpts, cell, spectral_weight,
 
 def EBS_cmaps(kpts, cell, E0, spectral_function,
               eref=0.0, nseg=None,
-              kpath_label=[],
+              kpath_label=None,
               save='ebs_c.png',
               figsize=(3.0, 4.0),
               ylim=(-3, 3), show=True,
@@ -235,6 +235,9 @@ def EBS_cmaps(kpts, cell, E0, spectral_function,
     import matplotlib.pyplot as plt
 
     mpl.rcParams['axes.unicode_minus'] = False
+
+    if kpath_label is None:
+        kpath_label = []
 
     nspin = spectral_function.shape[0]
     kpt_c = np.dot(kpts, np.linalg.inv(cell).T)
