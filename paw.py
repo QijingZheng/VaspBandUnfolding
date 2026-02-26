@@ -686,7 +686,7 @@ class nonlr(object):
             self.pawpp = [pawpotcar(potstr) for potstr in
                           open(potcar).read().split('End of Dataset')[:-1]]
         elif isinstance(potcar, list):
-            assert np.alltrue([
+            assert np.all([
                 isinstance(pp, pawpotcar) for pp in potcar
             ])
             self.pawpp = potcar
@@ -704,7 +704,7 @@ class nonlr(object):
 
         assert len(self.elem_cnts) == len(self.pawpp), \
             "The number of elements in POTCAR and POSCAR does not match!"
-        if not np.alltrue([
+        if not np.all([
             self.pawpp[ii].element.split('_')[0] == elements[ii]
             for ii in range(len(elements))
         ]):
@@ -897,7 +897,7 @@ class nonlq(object):
             self.pawpp = [pawpotcar(potstr) for potstr in
                           open(potcar).read().split('End of Dataset')[:-1]]
         elif isinstance(potcar, list):
-            assert np.alltrue([
+            assert np.all([
                 isinstance(pp, pawpotcar) for pp in potcar
             ])
             self.pawpp = potcar
@@ -915,7 +915,7 @@ class nonlq(object):
 
         assert len(self.elem_cnts) == len(self.pawpp), \
             "The number of elements in POTCAR and POSCAR does not match!"
-        if not np.alltrue([
+        if not np.all([
             self.pawpp[ii].element.split('_')[0] == elements[ii]
             for ii in range(len(elements))
         ]):
