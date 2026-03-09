@@ -215,17 +215,17 @@ class pawpotcar(object):
             l, nlproj = [int(xx) for xx in ln_rmax_dion_part[:2]]
 
             proj_l += [l] * nlproj
-            self.proj_rmax = float(ln_rmax_dion_part[2])
+            self.proj_rmax = float(re.sub(r'(\d)[Dd]([+-])', r'\1E\2', ln_rmax_dion_part[2]))
 
-            dion = np.asarray(ln_rmax_dion_part[3:], dtype=float)
+            dion = np.asarray([re.sub(r'(\d)[Dd]([+-])', r'\1E\2', x) for x in ln_rmax_dion_part[3:]], dtype=float)
 
             for rr in dump[1:]:
                 reci, real = rr.split('Real Space Part')
                 qprojs.append(
-                    np.fromstring(reci, np.float64, sep=' ')
+                    np.fromstring(re.sub(r'(\d)[Dd]([+-])', r'\1E\2', reci), np.float64, sep=' ')
                 )
                 rprojs.append(
-                    np.fromstring(real, np.float64, sep=' ')
+                    np.fromstring(re.sub(r'(\d)[Dd]([+-])', r'\1E\2', real), np.float64, sep=' ')
                 )
 
         # the real space radial grid for the projector functions
@@ -265,7 +265,7 @@ class pawpotcar(object):
         grid_start_idx = data.index(" grid") + 1
 
         core_data = np.array([
-            x for line in data[grid_start_idx:]
+            re.sub(r'(\d)[Dd]([+-])', r'\1E\2', x) for line in data[grid_start_idx:]
             for x in line.strip().split()
             if not re.match(r'\ \w+', line)
         ], dtype=float)
