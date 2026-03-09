@@ -1,9 +1,100 @@
 #!/usr/bin/env python
 
+import os
 import re
 import numpy as np
 from vasp_constant import *
 from sph_harm import sph_r, sph_c
+
+
+# ---------------------------------------------------------------------------
+# Helper utilities for POTCAR / POSCAR parsing
+# ---------------------------------------------------------------------------
+
+_FORTRAN_D_RE = re.compile(r'(?<=\d)[Dd](?=[+-]?\d)')
+
+
+def _fortran_exp(text):
+    '''Replace Fortran D-notation (e.g. 1.23D+04, 1.23D04) with E-notation.'''
+    return _FORTRAN_D_RE.sub('E', text)
+
+
+def _parse_poscar_elem_cnts(poscar_path):
+    '''
+    Parse POSCAR to get the number of atoms per element group.
+    Handles both VASP 4 (no species line) and VASP 5+ formats.
+    '''
+    with open(poscar_path) as f:
+        lines = f.readlines()
+    tokens5 = lines[5].split('!')[0].split('#')[0].split()
+    try:
+        return [int(x) for x in tokens5]          # VASP 4
+    except ValueError:
+        tokens6 = lines[6].split('!')[0].split('#')[0].split()
+        return [int(x) for x in tokens6]          # VASP 5+
+
+
+def _build_elem_groups(atoms, pawpp, potcar='POTCAR'):
+    '''
+    Determine element groups, counts, and per-atom element index.
+
+    Reads the POSCAR in the same directory as POTCAR to get the element counts,
+    which handles duplicate species (e.g. C H H for pseudohydrogen) correctly.
+    Falls back to grouping by consecutive ASE symbols if POSCAR is unavailable.
+    '''
+    natoms = len(atoms)
+    symbols = atoms.get_chemical_symbols()
+
+    # Try reading element counts from POSCAR (only when potcar is a file path)
+    if isinstance(potcar, str):
+        poscar_path = os.path.join(os.path.dirname(potcar) or '.', 'POSCAR')
+        if os.path.exists(poscar_path):
+            elem_cnts = _parse_poscar_elem_cnts(poscar_path)
+        else:
+            elem_cnts = None
+    else:
+        elem_cnts = None
+
+    # Fallback: group by consecutive identical symbols
+    if elem_cnts is None:
+        elem_cnts = []
+        prev = None
+        for s in symbols:
+            if s != prev:
+                elem_cnts.append(1)
+                prev = s
+            else:
+                elem_cnts[-1] += 1
+
+    elem_cnts = np.array(elem_cnts)
+
+    assert len(elem_cnts) == len(pawpp), \
+        "The number of elements in POTCAR ({}) and POSCAR ({}) does not match! ".format(
+            len(pawpp), len(elem_cnts)) + \
+        "If using duplicate species (e.g. pseudohydrogen), " + \
+        "ensure POSCAR is in the same directory as POTCAR."
+    assert sum(elem_cnts) == natoms, \
+        "Total atom count in POSCAR ({}) does not match atoms object ({})!".format(
+            sum(elem_cnts), natoms)
+
+    # Check POTCAR element names against POSCAR
+    potcar_elems = [pp.element.split('_')[0] for pp in pawpp]
+    if not np.all([potcar_elems[ii] == symbols[sum(elem_cnts[:ii])]
+                   for ii in range(len(potcar_elems))
+                   if sum(elem_cnts[:ii]) < natoms]):
+        print(
+            "\nWARNING:\nThe name of elements in POTCAR and POSCAR does not match!\n\n" +
+            "    POTCAR: {}\n".format(' '.join([pp.element for pp in pawpp])) +
+            "    POSCAR: {}\n".format(' '.join(symbols[sum(elem_cnts[:i])]
+                                              for i in range(len(elem_cnts))))
+        )
+
+    # Build per-atom element index from counts
+    element_idx = []
+    for i, cnt in enumerate(elem_cnts):
+        element_idx.extend([i] * cnt)
+
+    return potcar_elems, elem_cnts, element_idx
 
 
 def fftchk1(n):
@@ -215,17 +306,17 @@ class pawpotcar(object):
             l, nlproj = [int(xx) for xx in ln_rmax_dion_part[:2]]
 
             proj_l += [l] * nlproj
-            self.proj_rmax = float(re.sub(r'(\d)[Dd]([+-])', r'\1E\2', ln_rmax_dion_part[2]))
+            self.proj_rmax = float(_fortran_exp(ln_rmax_dion_part[2]))
 
-            dion = np.asarray([re.sub(r'(\d)[Dd]([+-])', r'\1E\2', x) for x in ln_rmax_dion_part[3:]], dtype=float)
+            dion = np.asarray([_fortran_exp(x) for x in ln_rmax_dion_part[3:]], dtype=float)
 
             for rr in dump[1:]:
                 reci, real = rr.split('Real Space Part')
                 qprojs.append(
-                    np.fromstring(re.sub(r'(\d)[Dd]([+-])', r'\1E\2', reci), np.float64, sep=' ')
+                    np.fromstring(_fortran_exp(reci), np.float64, sep=' ')
                 )
                 rprojs.append(
-                    np.fromstring(re.sub(r'(\d)[Dd]([+-])', r'\1E\2', real), np.float64, sep=' ')
+                    np.fromstring(_fortran_exp(real), np.float64, sep=' ')
                 )
 
         # the real space radial grid for the projector functions
@@ -265,7 +356,7 @@ class pawpotcar(object):
         grid_start_idx = data.index(" grid") + 1
 
         core_data = np.array([
-            re.sub(r'(\d)[Dd]([+-])', r'\1E\2', x) for line in data[grid_start_idx:]
+            _fortran_exp(x) for line in data[grid_start_idx:]
             for x in line.strip().split()
             if not re.match(r'\ \w+', line)
         ], dtype=float)
@@ -693,30 +784,8 @@ class nonlr(object):
         else:
             raise ValueError('Argument potcar must be a string or list of pawpotcar type!')
 
-        elements, elem_first_idx, elem_cnts = np.unique(atoms.get_chemical_symbols(),
-                                                        return_index=True,
-                                                        return_counts=True)
-        # Sometimes, the order of the elements returned by np.unique may not be
-        # consistent with that in POSCAR/POTCAR
-        elem_first_idx = np.argsort(elem_first_idx)
-        elements = elements[elem_first_idx]
-        self.elem_cnts = elem_cnts[elem_first_idx]
-
-        assert len(self.elem_cnts) == len(self.pawpp), \
-            "The number of elements in POTCAR and POSCAR does not match!"
-        if not np.all([
-            self.pawpp[ii].element.split('_')[0] == elements[ii]
-            for ii in range(len(elements))
-        ]):
-            print(
-                "\nWARNING:\nThe name of elements in POTCAR and POSCAR does not match!\n\n" +
-                "    POTCAR: {}\n".format(' '.join([pp.element for pp in self.pawpp])) +
-                "    POSCAR: {}\n".format(' '.join(elements))
-            )
-
-        self.elements = list(elements)
-        self.element_idx = [self.elements.index(s) for s in
-                            atoms.get_chemical_symbols()]
+        self.elements, self.elem_cnts, self.element_idx = \
+            _build_elem_groups(atoms, self.pawpp, potcar)
 
         self.set_grid(ngrid=ngrid)
         self.rphase()
@@ -904,30 +973,9 @@ class nonlq(object):
         else:
             raise ValueError('Argument potcar must be a string or list of pawpotcar type!')
 
-        elements, elem_first_idx, elem_cnts = np.unique(atoms.get_chemical_symbols(),
-                                                        return_index=True,
-                                                        return_counts=True)
-        # Sometimes, the order of the elements returned by np.unique may not be
-        # consistent with that in POSCAR/POTCAR
-        elem_first_idx = np.argsort(elem_first_idx)
-        elements = elements[elem_first_idx]
-        self.elem_cnts = elem_cnts[elem_first_idx]
+        self.elements, self.elem_cnts, self.element_idx = \
+            _build_elem_groups(atoms, self.pawpp, potcar)
 
-        assert len(self.elem_cnts) == len(self.pawpp), \
-            "The number of elements in POTCAR and POSCAR does not match!"
-        if not np.all([
-            self.pawpp[ii].element.split('_')[0] == elements[ii]
-            for ii in range(len(elements))
-        ]):
-            print(
-                "\nWARNING:\nThe name of elements in POTCAR and POSCAR does not match!\n\n" +
-                "    POTCAR: {}\n".format(' '.join([pp.element for pp in self.pawpp])) +
-                "    POSCAR: {}\n".format(' '.join(elements))
-            )
-
-        self.elements = list(elements)
-        self.element_idx = [self.elements.index(s) for s in
-                            atoms.get_chemical_symbols()]
         # G-vectors in fractional coordinate
         self.Gvec = gvectors(
             atoms.cell, encut, k,
