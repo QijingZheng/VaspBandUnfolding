@@ -1,7 +1,14 @@
 #!/usr/bin/env python
 
 import numpy as np
-from scipy.special import sph_harm
+
+try:
+    from scipy.special import sph_harm_y
+
+    def _sph_harm(m, n, azimuth, polar):
+        return sph_harm_y(n, m, polar, azimuth)
+except ImportError:
+    from scipy.special import sph_harm as _sph_harm
 
 
 def cart2sph(xyz, epsilon=1E-10):
@@ -53,7 +60,7 @@ def sph_c(xyz, l, m=None):
 
     r, phi, theta = cart2sph(xyz)
     N = xyz.shape[0]
-    ylm = [sph_harm(M, l, phi, theta) for M in range(-l, l+1)]
+    ylm = [_sph_harm(M, l, phi, theta) for M in range(-l, l+1)]
 
     if m is None:
         return np.array(ylm, dtype=complex).T
