@@ -3,3 +3,4 @@ build/
 PyVaspWfc.*/
 dist/
 *.swp
+.DS_Store
