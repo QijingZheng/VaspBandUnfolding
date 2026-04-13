@@ -1,0 +1,3 @@
+# Optional dependency for all-electron / PAW spherical-Bessel workflows
+# Install separately after the core requirements.
+pySBT @ git+https://github.com/QijingZheng/pySBT.git

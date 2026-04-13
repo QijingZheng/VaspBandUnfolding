@@ -1,0 +1,21 @@
+SYSTEM = monolayer MoSe2 fixed-electron exciton-wavefunction example
+
+ENCUT = 400
+EDIFF = 1E-6
+ISMEAR = 0
+SIGMA = 0.02
+
+ALGO = BSE
+NBANDS = 144
+ENCUTGW = 150
+NBANDSO = 4
+NBANDSV = 8
+OMEGAMAX = 6
+
+ANTIRES = 0
+KPOINT_BSE = 1 0 0 0
+NBSEEIG = 5
+BSEELECTRON = 0.5 0.5 0.5
+
+LWAVE = .FALSE.
+LCHARG = .FALSE.

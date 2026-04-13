@@ -13,7 +13,7 @@ from scipy.fftpack import fftfreq, fftn, ifftn
 
 def save2vesta(phi=None, poscar='POSCAR', prefix='wfc',
                lgam=False, lreal=False, ncol=10):
-    '''
+    r'''
     Save the real space pseudo-wavefunction as vesta format.
     '''
     nx, ny, nz = phi.shape
@@ -59,7 +59,7 @@ def save2vesta(phi=None, poscar='POSCAR', prefix='wfc',
 
 
 class vaspwfc(object):
-    '''
+    r'''
     Class for processing VASP Pseudowavefunction stored in WAVECAR.  This
     program is motivated by PIESTA written by Ren Hao <renh@upc.edu.cn>.
 
@@ -88,7 +88,7 @@ class vaspwfc(object):
 
     def __init__(self, fnm='WAVECAR', lsorbit=False, lgamma=False,
                  gamma_half='x', omp_num_threads=1):
-        '''
+        r'''
         Initialization.
         '''
 
@@ -124,7 +124,7 @@ class vaspwfc(object):
             assert self._nspin == 1, "NSPIN = 1 for noncollinear version WAVECAR!"
 
     def set_omp_num_threads(self, nproc):
-        '''
+        r'''
         Set the OMP_NUM_THREADS envrionment variable
         '''
         assert 1 <= nproc <= cpu_count()
@@ -132,19 +132,19 @@ class vaspwfc(object):
         os.envrion['OMP_NUM_THREADS'] = str(nproc)
 
     def isSocWfc(self):
-        """
+        r"""
         Is the WAVECAR from an SOC calculation?
         """
         return True if self._lsoc else False
 
     def isGammaWfc(self):
-        """
+        r"""
         Is the WAVECAR from an SOC calculation?
         """
         return True if self._lgam else False
 
     def readWFHeader(self):
-        '''
+        r'''
         Read the system information from WAVECAR, which is written in the first
         two record.
 
@@ -186,7 +186,7 @@ class vaspwfc(object):
         self._ngrid = np.array(2 * CUTOF + 1, dtype=int)
 
     def setWFPrec(self):
-        '''
+        r'''
         Set wavefunction coefficients precision:
             TAG = 45200: single precision complex, np.complex64, or complex(qs)
             TAG = 45210: double precision complex, np.complex128, or complex(q)
@@ -204,7 +204,7 @@ class vaspwfc(object):
             raise ValueError("Invalid TAG values: {}".format(self._rtag))
 
     def readWFBand(self):
-        '''
+        r'''
         Extract KS energies and Fermi occupations from WAVECAR.
         '''
 
@@ -237,7 +237,7 @@ class vaspwfc(object):
         return self._kpath, self._bands
 
     def get_kpath(self, nkseg=None):
-        '''
+        r'''
         Construct k-point path, find out the k-path boundary if possible.
 
         nkseg is the number of k-points in each k-path segments.
@@ -273,7 +273,7 @@ class vaspwfc(object):
         return self._kpath, self._kbound
 
     def gvectors(self, ikpt=1, force_Gamma=False, check_consistency=True):
-        '''
+        r'''
         Generate the G-vectors that satisfies the following relation
             (G + k)**2 / 2 < ENCUT
         '''
@@ -437,7 +437,7 @@ class vaspwfc(object):
 
     def save2vesta(self, phi=None, lreal=False, poscar='POSCAR', prefix='wfc',
                    ncol=10):
-        '''
+        r'''
         Save the real space pseudo-wavefunction as vesta format.
         '''
         nx, ny, nz = phi.shape
@@ -481,7 +481,7 @@ class vaspwfc(object):
 
 
     def get_ps_wfc(self, *args, **kwargs):
-        '''
+        r'''
         Alias for the wfc_r method.
         '''
 
@@ -492,7 +492,7 @@ class vaspwfc(object):
               gvec=None, Cg=None, ngrid=None,
               rescale=None,
               norm=False, kr_phase=False, r0=None):
-        '''
+        r'''
         Obtain the pseudo-wavefunction of the specified KS states in real space
         by performing FT transform on the reciprocal space planewave
         coefficients.  The 3D FT grid size is determined by ngrid, which
@@ -724,7 +724,7 @@ class vaspwfc(object):
         return rho, V_r, E_x, E_y, E_z
 
     def readBandCoeff(self, ispin=1, ikpt=1, iband=1, norm=False):
-        '''
+        r'''
         Read the planewave coefficients of specified KS states.
         '''
 
@@ -742,7 +742,7 @@ class vaspwfc(object):
         return cg
 
     def whereRec(self, ispin=1, ikpt=1, iband=1):
-        '''
+        r'''
         Return the rec position for specified KS state.
         '''
 
@@ -754,7 +754,7 @@ class vaspwfc(object):
         return rec
 
     def checkIndex(self, ispin, ikpt, iband):
-        '''
+        r'''
         Check if the index is valid!
         '''
         assert 1 <= ispin <= self._nspin,  'Invalid spin index!'
@@ -768,7 +768,7 @@ class vaspwfc(object):
         return self.get_dipole_mat(ks_i, ks_j)
 
     def get_dipole_mat(self, ks_i, ks_j):
-        '''
+        r'''
         Dipole transition within the electric dipole approximation (EDA).
         Please refer to this post for more details.
 
@@ -829,7 +829,7 @@ class vaspwfc(object):
         return Emk, Enk, dE, dipole_mat
 
     def get_moment_mat(self, ks_i, ks_j):
-        '''
+        r'''
         The momentum operator matrix between the pseudo-wavefunction in the
         velocity gauge
 
@@ -898,7 +898,7 @@ class vaspwfc(object):
 
 
     def inverse_participation_ratio(self, norm=True):
-        '''
+        r'''
         Calculate Inverse Paticipation Ratio (IPR) from the wavefunction. IPR is
         a measure of the localization of Kohn-Sham states. For a particular KS
         state \phi_j, it is defined as
@@ -932,7 +932,7 @@ class vaspwfc(object):
         return self.ipr
 
     def elf(self, kptw, ngrid=None, warn=True):
-        '''
+        r'''
         Calculate the electron localization function (ELF) from WAVECAR.
 
         The following formula was extracted from VASP ELF.F:

@@ -6,6 +6,10 @@
 
   Moreover, a command line tool named `wfcplot` in the `bin` directory can be used to output real-space pseudo-wavefunctions.
 
+- `bse.py` can be used to parse `BSEFATBAND`, plot exciton density in the first Brillouin zone, and reconstruct fixed-hole or fixed-electron exciton densities in real space from `BSEFATBAND + WAVECAR + POSCAR`.
+
+  Moreover, a command line tool named `bseplot` in the `bin` directory can be used for both reciprocal-space and real-space exciton workflows.
+
 - `paw.py` can be used to parse the PAW `POTCAR` file. A command line tool named `potplot` in the `bin` directory can be used to visualize the projector function and partial waves contained in the `POTCAR`.
 
 - `aewfc.py` can be used to generate all-electron (AE) wavefunction. 
@@ -18,27 +22,40 @@ A list of publications utilizing `VaspBandUnfolding` can be found [here](doc/Vas
 
 ## Installation
 
--  Requirements
+- Core requirements
 
     * Numpy
     * Scipy
     * Matplotlib
     * ASE
-    * [pySBT](https://github.com/QijingZheng/pySBT) for spherical Bessel transform
 
+- Optional requirement
 
-- Manual Installation
+    * [pySBT](https://github.com/QijingZheng/pySBT) for all-electron / PAW spherical-Bessel workflows
+
+- Install dependencies only
+
+  ```bash
+  pip install -r requirements.txt
+  # optional
+  pip install -r requirements-optional.txt
+  ```
+
+- Install the package from a clone
 
   ```bash
   git clone https://github.com/QijingZheng/VaspBandUnfolding
-  # set the 
   cd VaspBandUnfolding
-  python setup.py install --prefix=/the/path/of/your/dir/
-  export PYTHONPATH=/the/path/of/your/dir:${PYTHONPATH}
+  pip install .
   ```
 
+- Editable install for development
 
-- Using Pip
+  ```bash
+  pip install -e .
+  ```
+
+- Install directly with pip
 
   ```bash
   pip install git+https://github.com/QijingZheng/VaspBandUnfolding
@@ -132,6 +149,57 @@ A list of publications utilizing `VaspBandUnfolding` can be found [here](doc/Vas
     ```
 
     Please refer to `wfcplot -h` for more information of the usage.
+
+- Exciton density from `BSEFATBAND`
+
+  `bse.py` provides both reciprocal-space and real-space utilities for VASP BSE calculations.
+
+  - Plot exciton density in the first Brillouin zone:
+
+    ```bash
+    bseplot bz --input BSEFATBAND --poscar POSCAR --exciton 1
+    ```
+
+  - Reconstruct the real-space electron density with a fixed hole:
+
+    ```bash
+    bseplot realspace --bsefatband BSEFATBAND --wavecar WAVECAR --poscar POSCAR \
+        --exciton 1 --hole 0.5,0.5,0.5
+    ```
+
+  - Reconstruct the real-space hole density with a fixed electron:
+
+    ```bash
+    bseplot realspace --bsefatband BSEFATBAND --wavecar WAVECAR --poscar POSCAR \
+        --exciton 1 --electron 0.5,0.5,0.5
+    ```
+
+  The `realspace` workflow also requires `OUTCAR` (or `OUTCAR.symm`) to recover
+  symmetry operators and the `IBZKPT_HF` full-BZ mapping used to restore the
+  correct Bloch phases when `WAVECAR` stores only irreducible k-points. Keep
+  `OUTCAR` in the same directory as `WAVECAR`, `BSEFATBAND`, or `POSCAR`.
+
+  The `realspace` mode writes VASP scalar grids such as `exciton_001_electron_rho.vasp`
+  or `exciton_001_hole_rho.vasp`. The `bz` mode writes a PNG map of the folded
+  first-BZ exciton density.
+
+  A complete MoSe2 example for this workflow is available in [examples/bse](./examples/bse).
+
+  Example first-BZ density for the lowest exciton:
+
+  ![MoSe2 lowest exciton in the first Brillouin zone](./examples/bse/exciton_001_bz.png)
+
+  Fixed-hole electron density comparison for exciton 1:
+
+  | `bse.py` | VASP |
+  | --- | --- |
+  | ![Exciton 1 electron density from bse.py](./examples/bse/X1-electron-bsepy.png) | ![Exciton 1 electron density from VASP](./examples/bse/X1-electron-vasp.png) |
+
+  Fixed-electron hole density comparison for exciton 1:
+
+  | `bse.py` | VASP |
+  | --- | --- |
+  | ![Exciton 1 hole density from bse.py](./examples/bse/X1-hole-bsepy.png) | ![Exciton 1 hole density from VASP](./examples/bse/X1-hole-vasp.png) |
 
 - All-electron wavefunction in real space
 
