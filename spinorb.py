@@ -59,7 +59,7 @@ def read_cproj_NormalCar(inf='NormalCAR', save_cproj=True):
 
 
 def read_SocCar(inf='SocCar'):
-    '''
+    r'''
     SocCar contains the SOC matrix elements on the basis of core AE
     wavefunctions.
 
@@ -177,7 +177,7 @@ def get_bandInfo(inFile='OUTCAR'):
 
 
 def setup_ls(L, theta=0.0, phi=0.0, saxis=None):
-    '''
+    r'''
     Calculate the spin-orbit matrix in the basis of sphereical
     harmonics:
         < Y_l^m; \sigma_1 | S \cdot L | Y_l'^m'; \sigma_2 >
@@ -340,7 +340,7 @@ def setup_ls(L, theta=0.0, phi=0.0, saxis=None):
 
 
 def paw_core_soc_mat(theta=0.0, phi=0.0, saxis=None):
-    '''
+    r'''
     Calculate the spin-orbit matrix elements on the basis of the partial AE
     wavefunctions.
 
@@ -565,7 +565,7 @@ def find_fermi_level(band_energies, kpt_weight,
                      nelect, occ=None, sigma=0.01, nedos=100,
                      soc_band=False,
                      nmax=1000):
-    '''
+    r'''
     Locate ther Fermi level from the band energies, k-points weights and number
     of electrons. 
                                              1.0

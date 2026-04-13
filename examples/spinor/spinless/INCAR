@@ -1,0 +1,26 @@
+General
+  SYSTEM = MoSe2
+  PREC   = Normal
+  ISPIN  = 1
+  ISTART = 0
+  ICHARG = 2
+
+Electronic relaxation
+  NPAR   = 8
+  ISMEAR = 0
+  SIGMA  = 0.1
+  ALGO   = Normal
+  NELMIN = 4
+  NELM   = 200
+  EDIFF  = 1E-6
+  EDIFFG = -0.001
+
+Molecular Dynamics
+  ISYM   = 0      # turn off symmetry for MD
+  IBRION = -1      # turn on MD
+  LORBIT  = 11
+
+Writing Flag
+  NWRITE = 1      # make OUTCAR small
+  LWAVE  = .TRUE.
+  LCHARG = .TRUE.

@@ -2,6 +2,11 @@
 """
 Utilities for parsing VASP BSEFATBAND output, plotting excitons in k-space,
 and reconstructing fixed-particle exciton densities in real space from WAVECAR.
+
+Contributor:
+- Ionizing
+- QijingZheng
+- OpenAI Codex
 """
 from __future__ import annotations
 
