@@ -150,6 +150,46 @@ A list of publications utilizing `VaspBandUnfolding` can be found [here](doc/Vas
 
     Please refer to `wfcplot -h` for more information of the usage.
 
+- Build SOC spinor `WAVECAR` (`spinormaker`)
+
+  `spinor.py` also provides a CLI named `spinormaker` for constructing SOC
+  spinor `WAVECAR` from scalar/ISPIN=2 runs (with `NormalCAR`, `SocCar`,
+  `SocRadCar`).
+
+  ```bash
+  spinormaker --mixwave-ibs 211 213 215 217 219 --correct-kpts 1
+  ```
+
+  Full k-point / full odd-even band-pair mode:
+
+  ```bash
+  spinormaker --full-kpts --full-bands
+  ```
+
+  Notes:
+
+  - `--full-kpts` means all k-points are processed, while band pairs still come
+    from `--mixwave-ibs`.
+  - `--full-bands` means all odd/even band pairs are used.
+  - `--full-kpts-full-bands` is an alias for `--full-kpts --full-bands`.
+
+  A complete MoSe2 `2x3` input example (without `WAVECAR` due file size) is
+  available in [examples/spinor](./examples/spinor). The README there includes
+  an `unfold_main` validation snapshot for bands `213-220` (K+/K- projection
+  and `sigma_z`).
+
+  Example excerpt (`ispin2`, bands `213-214`):
+
+  ```text
+  213 E=-1.21393  K+=0.00000  K-=0.99958  sz=+0.78827
+  214 E=-1.21393  K+=0.99958  K-=0.00000  sz=-0.78827
+  ```
+
+  Unchanged scalar `WAVECAR` reference uses half-band mapping
+  `ib_scalar = (ib_spinor + 1) // 2` (e.g. `213-220 -> 107-110`), giving
+  approximately symmetric valley weights (`K+ ~= K- ~= 0.5`) before spinor
+  construction.
+
 - Exciton density from `BSEFATBAND`
 
   `bse.py` provides both reciprocal-space and real-space utilities for VASP BSE calculations.

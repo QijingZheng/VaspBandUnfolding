@@ -30,6 +30,7 @@ py-modules = [
   "unfold",
   "procar",
   "spinorb",
+  "spinor",
   "sph_harm",
   "paw",
   "ewald",
@@ -42,4 +43,5 @@ script-files = [
   "bin/potplot",
   "bin/nebplot",
   "bin/bseplot",
+  "bin/spinormaker",
 ]
