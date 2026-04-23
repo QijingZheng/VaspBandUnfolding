@@ -6,7 +6,9 @@
 
   Moreover, a command line tool named `wfcplot` in the `bin` directory can be used to output real-space pseudo-wavefunctions.
 
-- `bse.py` can be used to parse `BSEFATBAND`, plot exciton density in the first Brillouin zone, and reconstruct fixed-hole or fixed-electron exciton densities in real space from `BSEFATBAND + WAVECAR + POSCAR`.
+- `bsefatband.py` can be used to parse `BSEFATBAND`, plot exciton density in the first Brillouin zone, and reconstruct fixed-hole or fixed-electron exciton densities in real space from `BSEFATBAND + WAVECAR + POSCAR`.
+
+- `bsematrix.py` can build the Hartree/exchange part of the BSE matrix with a local full-grid implementation, diagonalize it, and write a VASP-format `BSEFATBAND`-style file for comparison against VASP output.
 
   Moreover, a command line tool named `bseplot` in the `bin` directory can be used for both reciprocal-space and real-space exciton workflows.
 
@@ -190,9 +192,10 @@ A list of publications utilizing `VaspBandUnfolding` can be found [here](doc/Vas
   approximately symmetric valley weights (`K+ ~= K- ~= 0.5`) before spinor
   construction.
 
+
 - Exciton density from `BSEFATBAND`
 
-  `bse.py` provides both reciprocal-space and real-space utilities for VASP BSE calculations.
+  `bsefatband.py` provides both reciprocal-space and real-space utilities for VASP BSE calculations.
 
   - Plot exciton density in the first Brillouin zone:
 
@@ -231,15 +234,46 @@ A list of publications utilizing `VaspBandUnfolding` can be found [here](doc/Vas
 
   Fixed-hole electron density comparison for exciton 1:
 
-  | `bse.py` | VASP |
+  | `bsefatband.py` | VASP |
   | --- | --- |
-  | ![Exciton 1 electron density from bse.py](./examples/bse/X1-electron-bsepy.png) | ![Exciton 1 electron density from VASP](./examples/bse/X1-electron-vasp.png) |
+  | ![Exciton 1 electron density from bsefatband.py](./examples/bse/X1-electron-bsepy.png) | ![Exciton 1 electron density from VASP](./examples/bse/X1-electron-vasp.png) |
 
   Fixed-electron hole density comparison for exciton 1:
 
-  | `bse.py` | VASP |
+  | `bsefatband.py` | VASP |
   | --- | --- |
-  | ![Exciton 1 hole density from bse.py](./examples/bse/X1-hole-bsepy.png) | ![Exciton 1 hole density from VASP](./examples/bse/X1-hole-vasp.png) |
+  | ![Exciton 1 hole density from bsefatband.py](./examples/bse/X1-hole-bsepy.png) | ![Exciton 1 hole density from VASP](./examples/bse/X1-hole-vasp.png) |
+
+- Exchange-only BSE matrix to `BSEFATBAND`
+
+  `bsematrix.py` now has a CLI wrapper in `bin/bsematrix`. The current implementation is intentionally limited to the full-grid Hartree/exchange path; response-basis acceleration remains TODO.
+
+  The prepared BP example in [examples/bsematrix/BP](./examples/bsematrix/BP) omits large binary files, so the command below reuses `WAVECAR` from a compatible VASP example while taking `OUTCAR`, `KPOINTS`, `POSCAR`, `POTCAR`, and the reference `BSEFATBAND_exonly` from the local BP directory:
+
+  ```bash
+  python bin/bsematrix \
+      --wavecar /Users/ionizing/tmp/VASP/vasp.5.4.4/examples/05_bse_hartree_only/WAVECAR \
+      --outcar examples/bsematrix/BP/OUTCAR \
+      --kpoints examples/bsematrix/BP/KPOINTS \
+      --poscar examples/bsematrix/BP/POSCAR \
+      --potcar examples/bsematrix/BP/POTCAR \
+      --mode paw_orth_only \
+      --vb-num 2 --cb-num 2 --ewin 0 6 \
+      --output-prefix examples/bsematrix/BP/AMAT_exchange_py \
+      --nexciton 8 \
+      --bsefatband-output examples/bsematrix/BP/BSEFATBAND_exonly_py \
+      --compare-to examples/bsematrix/BP/BSEFATBAND_exonly
+  ```
+
+  Current `BSEFATBAND_exonly` comparison on that example:
+
+  - `max_bse_eigenvalue_diff = 9.3020e-05 eV`
+  - `max_ip_eigenvalue_diff = 0.0`
+  - `max_column_weight_diff = 1.25944e-02`
+  - `max_amplitude_diff = 3.29354e-03`
+  - `min_phase_aligned_overlap = 9.999891362931e-01`
+
+  For this exchange-only comparison, `WAVEDER` is not required. VASP writes `BSEFATBAND` directly from the BSE eigenvectors and diagonal IP transition energies; `WAVEDER` becomes relevant later when oscillator strengths or optical spectra are needed.
 
 - All-electron wavefunction in real space
 
