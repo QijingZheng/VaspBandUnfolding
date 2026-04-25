@@ -226,54 +226,100 @@ A list of publications utilizing `VaspBandUnfolding` can be found [here](doc/Vas
   or `exciton_001_hole_rho.vasp`. The `bz` mode writes a PNG map of the folded
   first-BZ exciton density.
 
-  A complete MoSe2 example for this workflow is available in [examples/bse](./examples/bse).
+  A complete MoSe2 example for this workflow is available in [examples/bseplot](./examples/bseplot).
 
   Example first-BZ density for the lowest exciton:
 
-  ![MoSe2 lowest exciton in the first Brillouin zone](./examples/bse/exciton_001_bz.png)
+  ![MoSe2 lowest exciton in the first Brillouin zone](./examples/bseplot/exciton_001_bz.png)
 
   Fixed-hole electron density comparison for exciton 1:
 
   | `bsefatband.py` | VASP |
   | --- | --- |
-  | ![Exciton 1 electron density from bsefatband.py](./examples/bse/X1-electron-bsepy.png) | ![Exciton 1 electron density from VASP](./examples/bse/X1-electron-vasp.png) |
+  | ![Exciton 1 electron density from bsefatband.py](./examples/bseplot/X1-electron-bsepy.png) | ![Exciton 1 electron density from VASP](./examples/bseplot/X1-electron-vasp.png) |
 
   Fixed-electron hole density comparison for exciton 1:
 
   | `bsefatband.py` | VASP |
   | --- | --- |
-  | ![Exciton 1 hole density from bsefatband.py](./examples/bse/X1-hole-bsepy.png) | ![Exciton 1 hole density from VASP](./examples/bse/X1-hole-vasp.png) |
+  | ![Exciton 1 hole density from bsefatband.py](./examples/bseplot/X1-hole-bsepy.png) | ![Exciton 1 hole density from VASP](./examples/bseplot/X1-hole-vasp.png) |
 
-- Exchange-only BSE matrix to `BSEFATBAND`
+- BSE matrix benchmarks (`bsematrix.py`)
 
-  `bsematrix.py` now has a CLI wrapper in `bin/bsematrix`. The current implementation is intentionally limited to the full-grid Hartree/exchange path; response-basis acceleration remains TODO.
+  `bsematrix.py` builds the BSE interaction matrix from `WAVECAR/OUTCAR/POSCAR/POTCAR`, supports both `pw_only` and `paw_orth_only`, and can write both `AMAT` text dumps and VASP-style `BSEFATBAND` files.
 
-  The prepared BP example in [examples/bsematrix/BP](./examples/bsematrix/BP) omits large binary files, so the command below reuses `WAVECAR` from a compatible VASP example while taking `OUTCAR`, `KPOINTS`, `POSCAR`, `POTCAR`, and the reference `BSEFATBAND_exonly` from the local BP directory:
+  The benchmark artifact set now lives in [examples/bsematrix/BP](./examples/bsematrix/BP). It contains text-format VASP and Python references for:
 
-  ```bash
-  python bin/bsematrix \
-      --wavecar /Users/ionizing/tmp/VASP/vasp.5.4.4/examples/05_bse_hartree_only/WAVECAR \
-      --outcar examples/bsematrix/BP/OUTCAR \
-      --kpoints examples/bsematrix/BP/KPOINTS \
-      --poscar examples/bsematrix/BP/POSCAR \
-      --potcar examples/bsematrix/BP/POTCAR \
-      --mode paw_orth_only \
-      --vb-num 2 --cb-num 2 --ewin 0 6 \
-      --output-prefix examples/bsematrix/BP/AMAT_exchange_py \
-      --nexciton 8 \
-      --bsefatband-output examples/bsematrix/BP/BSEFATBAND_exonly_py \
-      --compare-to examples/bsematrix/BP/BSEFATBAND_exonly
-  ```
+  - direct-only
+  - exchange-only / Hartree-term only
+  - both terms together
 
-  Current `BSEFATBAND_exonly` comparison on that example:
+  For each case, the directory includes:
 
-  - `max_bse_eigenvalue_diff = 9.3020e-05 eV`
-  - `max_ip_eigenvalue_diff = 0.0`
-  - `max_column_weight_diff = 1.25944e-02`
-  - `max_amplitude_diff = 3.29354e-03`
-  - `min_phase_aligned_overlap = 9.999891362931e-01`
+  - `vasp_*_BSEFATBAND.txt`
+  - `vasp_*_AMAT.txt`
+  - `py_pw_only_*_BSEFATBAND.txt`, `py_pw_only_*_AMAT.txt`
+  - `py_paw_orth_only_*_BSEFATBAND.txt`, `py_paw_orth_only_*_AMAT.txt`
 
-  For this exchange-only comparison, `WAVEDER` is not required. VASP writes `BSEFATBAND` directly from the BSE eigenvectors and diagonal IP transition energies; `WAVEDER` becomes relevant later when oscillator strengths or optical spectra are needed.
+  The VASP `BSEFATBAND` files bundled in the examples contain 8 printed excitons, but the tables below list the first 10 eigenvalues obtained by diagonalizing the full `BSE_AMAT.bin` reference matrix so both modes can be compared on the same footing.
+
+  AMAT summary:
+
+  | Case | Mode | `max(|ΔA|)` (eV) | `||ΔA||_F` (eV) | Worst entry |
+  | --- | --- | ---: | ---: | --- |
+  | direct-only | `pw_only` | 0.00768173 | 0.03076986 | `(12,12)` |
+  | direct-only | `paw_orth_only` | 0.00256244 | 0.01002069 | `(27,12)` |
+  | exchange-only | `pw_only` | 0.00520426 | 0.04512843 | `(3,3)` |
+  | exchange-only | `paw_orth_only` | 0.00070821 | 0.00610677 | `(12,27)` |
+  | both | `pw_only` | 0.00356970 | 0.02483112 | `(3,21)` |
+  | both | `paw_orth_only` | 0.00327066 | 0.01518818 | `(27,12)` |
+
+  Direct-only first 10 BSE eigenvalues:
+
+  | # | VASP (eV) | `pw_only` (eV) | Δ (meV) | `paw_orth_only` (eV) | Δ (meV) |
+  | ---: | ---: | ---: | ---: | ---: | ---: |
+  | 1 | 0.49212829 | 0.47646457 | -15.663718 | 0.48889006 | -3.238229 |
+  | 2 | 0.60201503 | 0.60189693 | -0.118105 | 0.60213102 | 0.115985 |
+  | 3 | 0.65357165 | 0.65018958 | -3.382068 | 0.65252903 | -1.042623 |
+  | 4 | 0.83531815 | 0.83513060 | -0.187546 | 0.83526516 | -0.052982 |
+  | 5 | 1.03555253 | 1.03095473 | -4.597790 | 1.03735120 | 1.798679 |
+  | 6 | 1.06892204 | 1.06874978 | -0.172261 | 1.06906668 | 0.144642 |
+  | 7 | 1.07212036 | 1.07194033 | -0.180036 | 1.07217889 | 0.058525 |
+  | 8 | 1.29205933 | 1.28610280 | -5.956538 | 1.29266773 | 0.608392 |
+  | 9 | 1.47121986 | 1.46503458 | -6.185279 | 1.47112060 | -0.099262 |
+  | 10 | 1.47576966 | 1.47222936 | -3.540294 | 1.47813079 | 2.361126 |
+
+  Exchange-only first 10 BSE eigenvalues:
+
+  | # | VASP (eV) | `pw_only` (eV) | Δ (meV) | `paw_orth_only` (eV) | Δ (meV) |
+  | ---: | ---: | ---: | ---: | ---: | ---: |
+  | 1 | 1.53335142 | 1.53335146 | 0.000039 | 1.53335143 | 0.000002 |
+  | 2 | 1.53344213 | 1.53344929 | 0.007166 | 1.53344163 | -0.000495 |
+  | 3 | 1.75329793 | 1.75330120 | 0.003266 | 1.75329770 | -0.000228 |
+  | 4 | 2.00071425 | 2.00071425 | 0.000004 | 2.00071425 | 0.000001 |
+  | 5 | 2.00079815 | 2.00080456 | 0.006409 | 2.00079771 | -0.000440 |
+  | 6 | 2.84479254 | 2.84479269 | 0.000140 | 2.84479255 | 0.000004 |
+  | 7 | 2.84488258 | 2.84488930 | 0.006725 | 2.84488213 | -0.000445 |
+  | 8 | 3.22373604 | 3.22373639 | 0.000348 | 3.22373605 | 0.000012 |
+  | 9 | 3.22382989 | 3.22383713 | 0.007246 | 3.22382946 | -0.000429 |
+  | 10 | 3.56269414 | 3.56269417 | 0.000028 | 3.56269414 | 0.000005 |
+
+  Both terms first 10 BSE eigenvalues:
+
+  | # | VASP (eV) | `pw_only` (eV) | Δ (meV) | `paw_orth_only` (eV) | Δ (meV) |
+  | ---: | ---: | ---: | ---: | ---: | ---: |
+  | 1 | 0.59755271 | 0.59789800 | 0.345288 | 0.59733017 | -0.222543 |
+  | 2 | 0.60214685 | 0.60203072 | -0.116123 | 0.60226185 | 0.115003 |
+  | 3 | 0.81773692 | 0.81819859 | 0.461668 | 0.81736229 | -0.374636 |
+  | 4 | 0.95004106 | 0.95659218 | 6.551112 | 0.94577218 | -4.268880 |
+  | 5 | 1.03878070 | 1.03404920 | -4.731495 | 1.04058328 | 1.802582 |
+  | 6 | 1.06893044 | 1.06876025 | -0.170187 | 1.06907431 | 0.143875 |
+  | 7 | 1.07222303 | 1.07209729 | -0.125748 | 1.07227428 | 0.051243 |
+  | 8 | 1.30876837 | 1.30431547 | -4.452895 | 1.30927662 | 0.508254 |
+  | 9 | 1.47644720 | 1.47286725 | -3.579956 | 1.47881397 | 2.366768 |
+  | 10 | 1.54488018 | 1.54427524 | -0.604943 | 1.54321845 | -1.661731 |
+
+  The BP README contains the same benchmark tables together with the exact artifact filenames.
 
 - All-electron wavefunction in real space
 

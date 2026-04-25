@@ -1,6 +1,6 @@
-# BSE Example
+# BSE Plot Example
 
-This example uses a monolayer MoSe2 BSE calculation and demonstrates the reciprocal-space `bseplot bz` workflow.
+This example uses a monolayer MoSe2 BSE calculation and demonstrates the reciprocal-space `bseplot bz` workflow. The directory was previously named `examples/bse`; all README references should now use `examples/bseplot`.
 
 Included files:
 - `BSEFATBAND`: exciton amplitudes used by `bseplot bz`
@@ -35,7 +35,7 @@ bseplot realspace --bsefatband BSEFATBAND --wavecar /path/to/WAVECAR --poscar PO
     --exciton 1 --electron '0.5,0.5,0.5'
 ```
 
-The real-space workflow also needs `OUTCAR` because `bse.py` reads symmetry
+The real-space workflow also needs `OUTCAR` because `bsefatband.py` / `bseplot realspace` read symmetry
 operators and the `IBZKPT_HF` full-BZ mapping from it when restoring Bloch
 phases for irreducible-k-point `WAVECAR`s.
 
@@ -43,15 +43,15 @@ You can then open the resulting `*.vasp` scalar grids in VESTA and render the re
 
 Fixed-hole electron density comparison for exciton 1:
 
-| `bse.py` | VASP |
+| `bseplot` | VASP |
 | --- | --- |
-| ![Exciton 1 electron density from bse.py](./X1-electron-bsepy.png) | ![Exciton 1 electron density from VASP](./X1-electron-vasp.png) |
+| ![Exciton 1 electron density from bseplot](./X1-electron-bsepy.png) | ![Exciton 1 electron density from VASP](./X1-electron-vasp.png) |
 
 Fixed-electron hole density comparison for exciton 1:
 
-| `bse.py` | VASP |
+| `bseplot` | VASP |
 | --- | --- |
-| ![Exciton 1 hole density from bse.py](./X1-hole-bsepy.png) | ![Exciton 1 hole density from VASP](./X1-hole-vasp.png) |
+| ![Exciton 1 hole density from bseplot](./X1-hole-bsepy.png) | ![Exciton 1 hole density from VASP](./X1-hole-vasp.png) |
 
 Note:
 - `OUTCAR` for this BSE run reports `PAW_PBE Mo_sv_GW 05Dec2013` and `PAW_PBE Se_GW 20Mar2012`.
