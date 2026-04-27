@@ -272,14 +272,16 @@ class vaspwfc(object):
 
         return self._kpath, self._kbound
 
-    def gvectors(self, ikpt=1, force_Gamma=False, check_consistency=True):
+    def gvectors(self, ikpt=1, force_Gamma=False, check_consistency=True, kvec=None):
         r'''
         Generate the G-vectors that satisfies the following relation
             (G + k)**2 / 2 < ENCUT
         '''
         assert 1 <= ikpt <= self._nkpts,  'Invalid kpoint index!'
 
-        kvec = self._kvecs[ikpt-1]
+        if kvec is None:
+            kvec = self._kvecs[ikpt-1]
+        kvec = np.asarray(kvec, dtype=float)
         # force_Gamma: consider gamma-only case regardless of the actual setting
         lgam = True if force_Gamma else self._lgam
 
@@ -723,7 +725,10 @@ class vaspwfc(object):
 
         return rho, V_r, E_x, E_y, E_z
 
-    def readBandCoeff(self, ispin=1, ikpt=1, iband=1, norm=False):
+    def readBandCoeff(self, ispin=1, ikpt=1, iband=1, norm=False,
+                      gvec=None, kvec=None, time_reversed=False,
+                      remap_mode='none', fill_value=0.0j,
+                      return_gvec=False):
         r'''
         Read the planewave coefficients of specified KS states.
         '''
@@ -737,9 +742,62 @@ class vaspwfc(object):
         dump = np.fromfile(self._wfc, dtype=self._WFPrec, count=nplw)
 
         cg = np.asarray(dump, dtype=np.complex128)
+
+        needs_remap = (
+            remap_mode != 'none' or
+            gvec is not None or
+            kvec is not None or
+            time_reversed or
+            return_gvec
+        )
+        if not needs_remap:
+            if norm:
+                cg /= np.linalg.norm(cg)
+            return cg
+
+        if remap_mode not in ('none', 'requested'):
+            raise ValueError(f'Unsupported remap_mode: {remap_mode!r}')
+
+        raw_gvec = np.asarray(
+            self.gvectors(ikpt=ikpt, check_consistency=False),
+            dtype=int,
+        )
+        source_gvec = -raw_gvec if time_reversed else raw_gvec
+        source_coeff = np.conjugate(cg) if time_reversed else cg
+
+        if gvec is None:
+            target_kvec = self._kvecs[ikpt - 1] if kvec is None else np.asarray(kvec, dtype=float)
+            if time_reversed:
+                target_kvec = -np.asarray(target_kvec, dtype=float)
+            target_gvec = np.asarray(
+                self.gvectors(ikpt=ikpt, check_consistency=False, kvec=target_kvec),
+                dtype=int,
+            )
+        else:
+            target_gvec = np.asarray(gvec, dtype=int)
+
+        if remap_mode == 'requested' or gvec is not None or kvec is not None or time_reversed:
+            source_map = {
+                tuple(int(x) for x in g): source_coeff[idx]
+                for idx, g in enumerate(source_gvec)
+            }
+            fill = np.complex128(fill_value)
+            coeff = np.asarray(
+                [source_map.get(tuple(int(x) for x in g), fill) for g in target_gvec],
+                dtype=np.complex128,
+            )
+        else:
+            coeff = source_coeff
+            target_gvec = source_gvec
+
         if norm:
-            cg /= np.linalg.norm(cg)
-        return cg
+            coeff_norm = np.linalg.norm(coeff)
+            if coeff_norm != 0.0:
+                coeff = coeff / coeff_norm
+
+        if return_gvec:
+            return coeff, target_gvec
+        return coeff
 
     def whereRec(self, ispin=1, ikpt=1, iband=1):
         r'''

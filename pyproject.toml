@@ -34,8 +34,9 @@ py-modules = [
   "sph_harm",
   "paw",
   "ewald",
-  "coulomb_integral",
-  "bse",
+  "bsefatband",
+  "bsematrix",
+  "wfull",
 ]
 script-files = [
   "bin/wfcplot",
