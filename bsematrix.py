@@ -1,25 +1,99 @@
 #!/usr/bin/env python3
 
 """
-Build the Hartree/exchange part of the BSE matrix from VASP wavefunctions using
-the local full-grid path.
+bsematrix.py — BSE matrix builder aligned to the VASP 5.4.4 storage conventions.
 
-The workflow in this script is:
-1. Read the irreducible-k wavefunctions from WAVECAR together with symmetry,
-    full-BZ mapping, and charge-grid information from OUTCAR.
-2. Expand each excitonic pair state (v, k) -> (c, k + q) onto the full BZ while
-    preserving VASP's k-point ordering, time-reversal handling, and symmetry
-    phase conventions.
-3. Reconstruct the cell-periodic wavefunctions on the VASP charge grid, form the
-    pair densities in G space, apply the Coulomb kernel, and assemble the
-    Hartree/exchange contribution to the BSE matrix element by element.
-4. Optionally orthogonalize the PAW pseudo-wavefunctions with projector-overlap
-    corrections in `paw_orth_only` mode before building the pair densities.
-5. Diagonalize the resulting matrix and optionally write a VASP-style
-    `BSEFATBAND` file from the eigenvectors.
+This script reconstructs the Bethe-Salpeter Equation (BSE) Hamiltonian directly
+from VASP wavefunctions and metadata, with emphasis on reproducing the matrix
+layout and k-point bookkeeping used by VASP's own BSE implementation.
 
-This implementation currently targets the full-grid Hartree/exchange path only;
-response-basis acceleration remains a TODO.
+Physical model
+--------------
+In the excitonic pair basis
+
+    I = (v, c, k1, spin)  with  k3 = k1 + q_ext
+
+the assembled matrix is
+
+    A_IJ = (eps_c(I) - eps_v(I)) delta_IJ + K_H(I, J) + K_D(I, J)
+
+with
+
+    K_H(I, J) = + w_k * spin_factor * sum_G
+                rho_cv(1, 3; G)^* v(q_H + G) rho_vc(2, 4; G)
+
+    K_D(I, J) = - w_k * sum_G
+                rho_cc(3, 4; G)^* W(q_D + G) rho_vv(1, 2; G)
+
+and
+
+    q_H = k1 - k3 = -q_ext
+    q_D = k1 - k2 = k3 - k4
+
+The pair densities are built from the periodic parts of the Bloch states on the
+FFT grid:
+
+    rho_ab(G) = FFT[ u_a(r)^* u_b(r) ](G)
+
+where `u_{n,k}(r)` is reconstructed from the WAVECAR plane-wave coefficients
+without the Bloch phase factor.
+
+Implementation outline
+----------------------
+The main steps in this file are:
+
+1. read WAVECAR, OUTCAR, KPOINTS, and optionally POSCAR/POTCAR;
+2. recover irreducible-k and full-BZ mappings from OUTCAR, including symmetry
+   operators and time-reversal tags;
+3. build the electron-hole pair basis with the same full-BZ ordering needed for
+   VASP's half-stored dense AMAT layout;
+4. reconstruct cell-periodic wavefunctions on the VASP charge grid, applying
+   symmetry rotation, time reversal, and SETPHASE-compatible phase shifts;
+5. optionally orthogonalize pseudo-wavefunctions with PAW projector-overlap
+   corrections in `paw_orth_only` mode;
+6. contract Hartree and/or direct kernels either on the full FFT grid or, when
+   available, on the selected response basis loaded from `WFULL/W*`;
+7. diagonalize the Hermitian matrix and optionally write a VASP-style
+   `BSEFATBAND`.
+
+Alignment goals and conventions
+-------------------------------
+- Preserve VASP full-BZ pair ordering and storage masking rules.
+- Treat Hartree momentum as fixed at `-q_ext` and direct momentum as pair
+  dependent.
+- Keep diagonal excitation energies at matrix-assembly time, not at pair
+  construction time.
+- Use VASP FFT-grid conventions from OUTCAR (`NGXF/NGYF/NGZF`) whenever
+  available.
+- In `paw_orth_only`, include projector-overlap orthogonalization but do not
+  modify the source pair density.
+- In `paw_full`, rebuild the PAW source object from the VASP FAST_AUG dumps.
+
+Current scope and limitations
+-----------------------------
+- Supported matrix modes: `pw_only`, `paw_orth_only`, and `paw_full`.
+- Supported interactions: `hartree`, `direct`, and `both`.
+- The script can consume the selected response basis for screened direct-term
+  contractions, but its core object reconstruction path remains full-grid based.
+- `paw_full` requires `BSE_TRANS_MATRIX_FOCK.bin` and `BSE_FASTAUG_FOCK.bin`
+  from the matching VASP run.
+
+CLI usage
+---------
+Typical usage from the repository root:
+
+    python bsematrix.py \
+        --wavecar WAVECAR \
+        --outcar OUTCAR \
+        --kpoints KPOINTS \
+        --poscar POSCAR \
+        --potcar POTCAR \
+        --mode paw_orth_only \
+        --interaction both \
+        --vb-num 2 --cb-num 2 --ewin 0 6 \
+        --use-response-basis \
+        --output-prefix AMAT_bse \
+        --bsefatband-output BSEFATBAND
 
 Credits:
   - Ionizing
@@ -39,6 +113,8 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 from numpy.fft import fftn, ifftn
+from scipy.special import spherical_jn as _spherical_jn
+from sph_harm import sph_r as _sph_r
 from vasp_constant import EDEPS, HSQDTM, TPI
 from wfull import ScreenedPotentialData, find_screened_potential_file, read_screened_potential, read_screened_potential_diag
 
@@ -50,6 +126,7 @@ except ImportError:
 
 class _DefaultsFormatter(argparse.ArgumentDefaultsHelpFormatter):
     def _get_help_string(self, action: argparse.Action) -> str:
+        """Append default values to help text unless argparse already does so."""
         help_text = action.help or ""
         if "%(default)" in help_text:
             return help_text
@@ -61,6 +138,7 @@ class _DefaultsFormatter(argparse.ArgumentDefaultsHelpFormatter):
 
 
 def _resolve_existing_path(path_str: str | None, *, label: str) -> Path | None:
+    """Resolve an optional path and fail early if the file does not exist."""
     if path_str is None:
         return None
     path = Path(path_str).expanduser().resolve()
@@ -70,50 +148,95 @@ def _resolve_existing_path(path_str: str | None, *, label: str) -> Path | None:
 
 
 def _wrap_frac(v: np.ndarray | Sequence[float]) -> np.ndarray:
+    """Wrap fractional coordinates into the half-open interval [0, 1)."""
     return np.mod(np.asarray(v, dtype=float), 1.0)
 
 
 def _wrap_frac_signed(v: np.ndarray | Sequence[float]) -> np.ndarray:
+    """Wrap fractional coordinates into the interval [-0.5, 0.5)."""
     return np.mod(np.asarray(v, dtype=float) + 0.5, 1.0) - 0.5
 
 
 def _parse_fortran_float(text: str) -> float:
+    """Parse a float written with Fortran D/E exponent notation."""
     return float(text.replace("D", "E").replace("d", "E"))
 
 
 def _frac_key(frac: np.ndarray | Sequence[float], decimals: int = 8) -> Tuple[float, ...]:
+    """Build a rounded hashable key for wrapped fractional coordinates."""
     vals = np.mod(np.round(_wrap_frac(np.asarray(frac, dtype=float)), decimals), 1.0)
     return tuple(float(x) for x in vals.reshape(-1))
 
 
 def _wrap_frac_signed_key(frac: np.ndarray | Sequence[float], decimals: int = 8) -> Tuple[float, ...]:
+    """Build a rounded hashable key for signed wrapped fractional coordinates."""
     vals = np.round(_wrap_frac_signed(np.asarray(frac, dtype=float)), decimals)
     return tuple(float(x) for x in vals.reshape(-1))
 
 
-def _depsum_two_bands_rholm_trace_fortran_py(
-    cproj1: np.ndarray,
-    cproj2: np.ndarray,
-    trans_matrix_lm_first: np.ndarray,
-) -> np.ndarray:
-    trans_arr = np.asarray(trans_matrix_lm_first, dtype=np.complex128)
-    left = np.asarray(cproj1, dtype=np.complex128).reshape(-1)
-    right = np.asarray(cproj2, dtype=np.complex128).reshape(-1)
-    if trans_arr.ndim != 3:
-        raise ValueError(f"trans_matrix_lm_first must be rank-3, got shape {trans_arr.shape}")
-    lmmax = trans_arr.shape[1]
-    if trans_arr.shape[2] != lmmax:
-        raise ValueError(f"trans_matrix_lm_first last two dimensions must match, got {trans_arr.shape}")
-    if left.size < lmmax or right.size < lmmax:
-        raise ValueError(
-            "Projector vectors are smaller than lmmax: "
-            f"left={left.size}, right={right.size}, lmmax={lmmax}"
-        )
-    return np.einsum("i,kji,j->k", left[:lmmax], trans_arr, np.conj(right[:lmmax]))
+@dataclass(frozen=True)
+class KpointMatch:
+    """Reference from a full-BZ point back to an irreducible-k representative."""
+    ikpt: int
+    time_reversed: bool = False
+    symm_op: int = 0
+
+
+@dataclass(frozen=True)
+class FullBZKpoint:
+    """Full-BZ k-point together with the matched irreducible representative."""
+    full_index: int
+    k_frac: Tuple[float, float, float]
+    match: KpointMatch
+
+
+@dataclass(frozen=True)
+class SymmetryOp:
+    """Symmetry operator parsed from OUTCAR in fractional coordinates."""
+    irot: int
+    real_matrix: np.ndarray
+    reciprocal_matrix: np.ndarray
+    tau_frac: np.ndarray
+
+
+@dataclass(frozen=True)
+class PairState:
+    """Excitonic transition state stored in the same conventions as VASP BSE."""
+    iv: int
+    ic: int
+    ik: int
+    ik3: int
+    ik_ir: int
+    ik3_ir: int
+    ispin: int
+    eps_v: float
+    eps_c: float
+    k1_frac: Tuple[float, float, float]
+    k3_frac: Tuple[float, float, float]
+    k1_time_reversed: bool = False
+    k3_time_reversed: bool = False
+    k1_symm_op: int = 0
+    k3_symm_op: int = 0
+
+    @property
+    def excitation_energy(self) -> float:
+        """Return the independent-particle transition energy Ec - Ev."""
+        return float(self.eps_c - self.eps_v)
+
+
+@dataclass(frozen=True)
+class FatbandExciton:
+    """Container for one BSEFATBAND exciton block."""
+    index: int
+    bse_eigenvalue: float
+    ip_eigenvalue: float
+    column_weight: np.ndarray
+    amplitude: np.ndarray
 
 
 @dataclass(frozen=True)
 class TransMatrixDump:
+    """Serialized TRANS_MATRIX_FOCK metadata dumped from VASP."""
     version: int
     dims: Tuple[int, int, int, int]
     ntyp: int
@@ -130,6 +253,7 @@ class TransMatrixDump:
 
 @dataclass(frozen=True)
 class FastAugSourceRecord:
+    """One ion block from BSE_FASTAUG_FOCK.bin."""
     iatom: int
     ntype: int
     lmmax: int
@@ -142,6 +266,7 @@ class FastAugSourceRecord:
 
 @dataclass(frozen=True)
 class FastAugSourceDump:
+    """Serialized FAST_AUG_FOCK support and basis data dumped from VASP."""
     version: int
     grid_shape: Tuple[int, int, int]
     nions: int
@@ -150,6 +275,7 @@ class FastAugSourceDump:
 
 
 def _read_i4_from_buf(buf: bytes, offset: int) -> Tuple[int, int]:
+    """Read one int32 from a byte buffer."""
     arr = np.frombuffer(buf, dtype=np.int32, count=1, offset=offset)
     if arr.size != 1:
         raise ValueError("Unexpected EOF while reading int32")
@@ -157,6 +283,7 @@ def _read_i4_from_buf(buf: bytes, offset: int) -> Tuple[int, int]:
 
 
 def _read_i4_vec_from_buf(buf: bytes, offset: int, n: int) -> Tuple[np.ndarray, int]:
+    """Read a contiguous int32 vector from a byte buffer."""
     arr = np.frombuffer(buf, dtype=np.int32, count=n, offset=offset)
     if arr.size != n:
         raise ValueError("Unexpected EOF while reading int32 vector")
@@ -164,6 +291,7 @@ def _read_i4_vec_from_buf(buf: bytes, offset: int, n: int) -> Tuple[np.ndarray, 
 
 
 def _read_f8_vec_from_buf(buf: bytes, offset: int, n: int) -> Tuple[np.ndarray, int]:
+    """Read a contiguous float64 vector from a byte buffer."""
     arr = np.frombuffer(buf, dtype=np.float64, count=n, offset=offset)
     if arr.size != n:
         raise ValueError("Unexpected EOF while reading float64 vector")
@@ -171,6 +299,7 @@ def _read_f8_vec_from_buf(buf: bytes, offset: int, n: int) -> Tuple[np.ndarray, 
 
 
 def _read_c16_from_buf(buf: bytes, offset: int, n: int) -> Tuple[np.ndarray, int]:
+    """Read a contiguous complex128 vector from a byte buffer."""
     arr = np.frombuffer(buf, dtype=np.complex128, count=n, offset=offset)
     if arr.size != n:
         raise ValueError("Unexpected EOF while reading complex128 vector")
@@ -178,6 +307,7 @@ def _read_c16_from_buf(buf: bytes, offset: int, n: int) -> Tuple[np.ndarray, int
 
 
 def read_bse_trans_matrix_dump(path: str | Path) -> TransMatrixDump:
+    """Read BSE_TRANS_MATRIX_FOCK.bin."""
     dump_path = Path(path).expanduser().resolve()
     data = dump_path.read_bytes()
     offset = 0
@@ -224,6 +354,7 @@ def read_bse_trans_matrix_dump(path: str | Path) -> TransMatrixDump:
 
 
 def read_bse_fastaug_source_dump(path: str | Path) -> FastAugSourceDump:
+    """Read BSE_FASTAUG_FOCK.bin."""
     dump_path = Path(path).expanduser().resolve()
     data = dump_path.read_bytes()
     offset = 0
@@ -231,12 +362,14 @@ def read_bse_fastaug_source_dump(path: str | Path) -> FastAugSourceDump:
     offset += 8
     if magic != b"BSEFAS01":
         raise ValueError(f"Unexpected magic {magic!r} in {dump_path}")
+
     version, offset = _read_i4_from_buf(data, offset)
     ngx, offset = _read_i4_from_buf(data, offset)
     ngy, offset = _read_i4_from_buf(data, offset)
     ngz, offset = _read_i4_from_buf(data, offset)
     nions, offset = _read_i4_from_buf(data, offset)
     ntypes, offset = _read_i4_from_buf(data, offset)
+
     records: List[FastAugSourceRecord] = []
     for _ in range(nions):
         iatom, offset = _read_i4_from_buf(data, offset)
@@ -276,61 +409,8 @@ def read_bse_fastaug_source_dump(path: str | Path) -> FastAugSourceDump:
     )
 
 
-@dataclass(frozen=True)
-class KpointMatch:
-    ikpt: int
-    time_reversed: bool = False
-    symm_op: int = 0
-
-
-@dataclass(frozen=True)
-class FullBZKpoint:
-    full_index: int
-    k_frac: Tuple[float, float, float]
-    match: KpointMatch
-
-
-@dataclass(frozen=True)
-class SymmetryOp:
-    irot: int
-    real_matrix: np.ndarray
-    reciprocal_matrix: np.ndarray
-    tau_frac: np.ndarray
-
-
-@dataclass(frozen=True)
-class PairState:
-    iv: int
-    ic: int
-    ik: int
-    ik3: int
-    ik_ir: int
-    ik3_ir: int
-    ispin: int
-    eps_v: float
-    eps_c: float
-    k1_frac: Tuple[float, float, float]
-    k3_frac: Tuple[float, float, float]
-    k1_time_reversed: bool = False
-    k3_time_reversed: bool = False
-    k1_symm_op: int = 0
-    k3_symm_op: int = 0
-
-    @property
-    def excitation_energy(self) -> float:
-        return float(self.eps_c - self.eps_v)
-
-
-@dataclass(frozen=True)
-class FatbandExciton:
-    index: int
-    bse_eigenvalue: float
-    ip_eigenvalue: float
-    column_weight: np.ndarray
-    amplitude: np.ndarray
-
-
 def _kpoint_match_priority(match: KpointMatch) -> Tuple[int, int, int, int]:
+    """Rank candidate k-point matches the same way the builder prefers them."""
     return (
         int(match.time_reversed),
         int(match.symm_op != 0),
@@ -340,6 +420,7 @@ def _kpoint_match_priority(match: KpointMatch) -> Tuple[int, int, int, int]:
 
 
 def _rodrigues_rotation(axis: Sequence[float], angle_deg: float) -> np.ndarray:
+    """Construct a Cartesian rotation matrix from axis-angle data."""
     axis_arr = np.asarray(axis, dtype=float)
     norm = float(np.linalg.norm(axis_arr))
     if norm < 1e-12:
@@ -353,6 +434,7 @@ def _rodrigues_rotation(axis: Sequence[float], angle_deg: float) -> np.ndarray:
 
 
 def _parse_outcar_symmetry_ops(outcar_path: Path, lattice: np.ndarray, tol: float = 1e-5) -> List[SymmetryOp]:
+    """Parse fractional-space symmetry operators from an OUTCAR file."""
     lines = outcar_path.read_text(encoding="utf-8", errors="ignore").splitlines()
     start = None
     for line_idx, line in enumerate(lines):
@@ -396,6 +478,7 @@ def _parse_outcar_symmetry_ops(outcar_path: Path, lattice: np.ndarray, tol: floa
 
 
 def _parse_outcar_full_bz_kpoints(outcar_path: Path) -> List[Tuple[np.ndarray, int, bool]]:
+    """Parse the full-BZ k-point list emitted by IBZKPT_HF in OUTCAR."""
     lines = outcar_path.read_text(encoding="utf-8", errors="ignore").splitlines()
     for line_idx, line in enumerate(lines):
         if "Subroutine IBZKPT_HF returns following result" not in line:
@@ -434,6 +517,7 @@ def _parse_outcar_full_bz_kpoints(outcar_path: Path) -> List[Tuple[np.ndarray, i
 
 
 def _parse_outcar_ibzkpt_sections(outcar_path: Path) -> List[List[np.ndarray]]:
+    """Parse all IBZKPT reciprocal-coordinate tables found in OUTCAR."""
     lines = outcar_path.read_text(encoding="utf-8", errors="ignore").splitlines()
     sections: List[List[np.ndarray]] = []
     line_idx = 0
@@ -468,6 +552,7 @@ def _parse_outcar_ibzkpt_sections(outcar_path: Path) -> List[List[np.ndarray]]:
 
 
 def _parse_outcar_charge_grid(outcar_path: Path) -> Optional[Tuple[int, int, int]]:
+    """Read the VASP charge-density FFT grid from OUTCAR."""
     pattern = re.compile(
         r"dimension x,y,z NGXF=\s*(\d+) NGYF=\s*(\d+) NGZF=\s*(\d+)",
         re.IGNORECASE,
@@ -480,6 +565,7 @@ def _parse_outcar_charge_grid(outcar_path: Path) -> Optional[Tuple[int, int, int
 
 
 def _parse_outcar_encutgw(outcar_path: Path) -> Optional[float]:
+    """Read ENCUTGW from OUTCAR if the calculation wrote it."""
     pattern = re.compile(r"\bENCUTGW\s*=\s*([-+0-9.DEded]+)", re.IGNORECASE)
     for line in outcar_path.read_text(encoding="utf-8", errors="ignore").splitlines():
         match = pattern.search(line)
@@ -489,6 +575,7 @@ def _parse_outcar_encutgw(outcar_path: Path) -> Optional[float]:
 
 
 def _parse_outcar_ir_kpoints(outcar_path: Path, nkpts: int) -> Optional[np.ndarray]:
+    """Recover the irreducible-k coordinates from the OUTCAR band blocks."""
     pattern = re.compile(r"^\s*k-point\s+(\d+)\s*:\s*([-+0-9.DEded]+)\s+([-+0-9.DEded]+)\s+([-+0-9.DEded]+)\s+plane waves:")
     lines = outcar_path.read_text(encoding="utf-8", errors="ignore").splitlines()
     block: List[np.ndarray] = []
@@ -519,6 +606,7 @@ def _parse_outcar_ir_kpoints(outcar_path: Path, nkpts: int) -> Optional[np.ndarr
 
 
 def _load_ir_kvecs_from_search_dirs(search_dirs: Sequence[Path], fallback_kvecs: np.ndarray) -> np.ndarray:
+    """Prefer OUTCAR-derived irreducible k-vectors over the WAVECAR fallback."""
     fallback = np.asarray(fallback_kvecs, dtype=float)
     nkpts = int(fallback.shape[0])
     for dpath in search_dirs:
@@ -541,6 +629,7 @@ def _load_ir_kvecs_from_search_dirs(search_dirs: Sequence[Path], fallback_kvecs:
 
 
 def _generate_gvectors_for_kvec(wfc: vaspwfc, kvec: Sequence[float]) -> np.ndarray:
+    """Generate plane-wave G vectors for an explicit k-point and ENCUT."""
     fx, fy, fz = [np.arange(n, dtype=int) for n in wfc._ngrid]
     fx[wfc._ngrid[0] // 2 + 1:] -= wfc._ngrid[0]
     fy[wfc._ngrid[1] // 2 + 1:] -= wfc._ngrid[1]
@@ -552,12 +641,121 @@ def _generate_gvectors_for_kvec(wfc: vaspwfc, kvec: Sequence[float]) -> np.ndarr
     return np.asarray(kgrid[np.where(kenergy < wfc._encut)[0]], dtype=int)
 
 
+def _build_gaunt_table(l_max: int) -> dict:
+    """Numerically compute Gaunt coefficients for real spherical harmonics."""
+    L_max = 2 * l_max
+    ntheta, nphi = 300, 600
+    theta = np.linspace(0.0, np.pi, ntheta)
+    phi = np.linspace(0.0, 2.0 * np.pi, nphi)
+    T, P = np.meshgrid(theta, phi, indexing="ij")
+    st = np.sin(T).ravel()
+    xyz = np.stack([np.sin(T) * np.cos(P), np.sin(T) * np.sin(P), np.cos(T)], axis=-1).reshape(-1, 3)
+    dtheta = np.pi / (ntheta - 1)
+    dphi = 2.0 * np.pi / (nphi - 1)
+    dA = st * dtheta * dphi
+    ylm_all: dict = {}
+    for l in range(L_max + 1):
+        ylm = _sph_r(xyz, l)
+        for m_idx, m in enumerate(range(-l, l + 1)):
+            ylm_all[(l, m)] = ylm[:, m_idx]
+    gaunt: dict = {}
+    for l1 in range(l_max + 1):
+        for m1 in range(-l1, l1 + 1):
+            Y1 = ylm_all[(l1, m1)]
+            for l2 in range(l_max + 1):
+                for m2 in range(-l2, l2 + 1):
+                    Y12 = Y1 * ylm_all[(l2, m2)]
+                    for L in range(abs(l1 - l2), l1 + l2 + 1):
+                        if (l1 + l2 + L) % 2 != 0:
+                            continue
+                        for M in range(-L, L + 1):
+                            G = float(np.dot(Y12 * ylm_all[(L, M)], dA))
+                            if abs(G) > 1e-13:
+                                gaunt[(l1, m1, l2, m2, L, M)] = G
+    return gaunt
+
+
+_GAUNT_CACHE: dict = {}
+
+
+def _get_gaunt_table(l_max: int) -> dict:
+    """Return the cached Gaunt table for a given projector l_max."""
+    if l_max not in _GAUNT_CACHE:
+        _GAUNT_CACHE[l_max] = _build_gaunt_table(l_max)
+    return _GAUNT_CACHE[l_max]
+
+
+def _compute_Qij_lm(pp: Any) -> np.ndarray:
+    """Build the full-multipole PAW augmentation matrix Q_{ij}^{LM}."""
+    lmmax = pp.lmmax
+    l_max = max(l for (_n, l, _m) in pp.ilm)
+    L_max = 2 * l_max
+    n_LM = (L_max + 1) ** 2
+    gaunt = _get_gaunt_table(l_max)
+    Q_lm = np.zeros((n_LM, lmmax, lmmax))
+    for ii in range(lmmax):
+        n1, l1, m1 = pp.ilm[ii]
+        ae1 = pp.paw_ae_wfc[n1]
+        ps1 = pp.paw_ps_wfc[n1]
+        for jj in range(lmmax):
+            n2, l2, m2 = pp.ilm[jj]
+            ae2 = pp.paw_ae_wfc[n2]
+            ps2 = pp.paw_ps_wfc[n2]
+            for L in range(abs(l1 - l2), l1 + l2 + 1):
+                if (l1 + l2 + L) % 2 != 0 or L > L_max:
+                    continue
+                R_L = pp.radial_simp_int(pp.rgrid**L * (ae1 * ae2 - ps1 * ps2), inside_rcomp=True)
+                if abs(R_L) < 1e-30:
+                    continue
+                for M in range(-L, L + 1):
+                    G = gaunt.get((l1, m1, l2, m2, L, M), 0.0)
+                    if abs(G) > 1e-15:
+                        Q_lm[L * L + L + M, ii, jj] += R_L * G
+    return Q_lm
+
+
+def _depsum_two_bands_rholm_trace_py(
+    beta_left: np.ndarray,
+    beta_right: np.ndarray,
+    q_lm: np.ndarray,
+) -> np.ndarray:
+    """Contract two projector vectors with Q_{ij}^{LM} to obtain rho_LM."""
+    q_lm_arr = np.asarray(q_lm, dtype=np.complex128)
+    b_left = np.asarray(beta_left, dtype=np.complex128).reshape(-1)
+    b_right = np.asarray(beta_right, dtype=np.complex128).reshape(-1)
+    return np.einsum("i,kij,j->k", np.conj(b_left), q_lm_arr, b_right)
+
+
+def _depsum_two_bands_rholm_trace_fortran_py(
+    cproj1: np.ndarray,
+    cproj2: np.ndarray,
+    trans_matrix_lm_first: np.ndarray,
+) -> np.ndarray:
+    """Mirror VASP RHOLM_KERNEL ordering for TRANS_MATRIX_FOCK contractions."""
+    trans_arr = np.asarray(trans_matrix_lm_first, dtype=np.complex128)
+    left = np.asarray(cproj1, dtype=np.complex128).reshape(-1)
+    right = np.asarray(cproj2, dtype=np.complex128).reshape(-1)
+    if trans_arr.ndim != 3:
+        raise ValueError(f"trans_matrix_lm_first must be rank-3, got shape {trans_arr.shape}")
+    lmmax = trans_arr.shape[1]
+    if trans_arr.shape[2] != lmmax:
+        raise ValueError(f"trans_matrix_lm_first last two dimensions must match, got {trans_arr.shape}")
+    if left.size < lmmax or right.size < lmmax:
+        raise ValueError(
+            "Projector vectors are smaller than lmmax: "
+            f"left={left.size}, right={right.size}, lmmax={lmmax}"
+        )
+    return np.einsum("i,kji,j->k", left[:lmmax], trans_arr, np.conj(right[:lmmax]))
+
+
 class _PawOrthHelper:
+    """PAW helper for projector overlaps and full-BZ projector reconstruction."""
     def __init__(self, *, poscar_path: Path, potcar_path: Path, wfc: vaspwfc, ir_kvecs: np.ndarray, lgamma: bool, gamma_half: str, search_dirs: Sequence[Path]) -> None:
+        """Load PAW metadata and prepare projector caches."""
         from paw import pawpotcar, _build_elem_groups
 
         if ase_read is None:
-            raise ImportError("ASE is required for paw_orth_only mode")
+            raise ImportError("ASE is required for PAW-enabled modes")
         self.atoms = ase_read(str(poscar_path))
         self.wfc = wfc
         self.ir_kvecs = np.asarray(ir_kvecs, dtype=float)
@@ -568,6 +766,7 @@ class _PawOrthHelper:
         _, _, self.element_idx = _build_elem_groups(self.atoms, self.pawpp, str(potcar_path))
         self.natoms = len(self.atoms)
         self._Qij_per_type = [np.asarray(pp.get_Qij(), dtype=np.complex128) for pp in self.pawpp]
+        self._Qij_lm_per_type = [_compute_Qij_lm(pp) for pp in self.pawpp]
         self._nonlq_cache: Dict[Tuple[float, ...], nonlq] = {}
         self._nonlq_kvec_cache: Dict[Tuple[float, ...], nonlq] = {}
         self._proj_cache: Dict[Tuple[int, int, int], List[np.ndarray]] = {}
@@ -579,8 +778,11 @@ class _PawOrthHelper:
         self._source_aug_cache: Dict[str, np.ndarray] = {}
         self._Bcell = np.asarray(wfc._Bcell, dtype=float)
         self._Omega = float(wfc._Omega)
+        self._pos_frac = np.asarray(self.atoms.get_scaled_positions(), dtype=float)
+        self._multipole_kernel_cache: Dict[Tuple[Any, ...], Dict[str, Any]] = {}
 
     def _split_projector_vector(self, beta_flat: np.ndarray) -> List[np.ndarray]:
+        """Split a flattened projector vector into per-atom blocks."""
         flat = np.asarray(beta_flat, dtype=np.complex128).reshape(-1)
         blocks: List[np.ndarray] = []
         offset = 0
@@ -591,6 +793,7 @@ class _PawOrthHelper:
         return blocks
 
     def _projector_for_k(self, kvec: Sequence[float]) -> nonlq:
+        """Return the projector object for an irreducible-k representative."""
         from paw import nonlq
 
         key = _wrap_frac_signed_key(kvec)
@@ -602,6 +805,7 @@ class _PawOrthHelper:
         return projector
 
     def get_proj(self, ispin: int, ik: int, iband: int, coeff: np.ndarray) -> List[np.ndarray]:
+        """Project one irreducible-k band onto PAW projectors atom by atom."""
         key = (ispin, ik, iband)
         cached = self._proj_cache.get(key)
         if cached is not None:
@@ -613,6 +817,7 @@ class _PawOrthHelper:
         return blocks
 
     def _projector_for_full_k(self, kvec: Sequence[float]) -> nonlq:
+        """Return the projector object for an arbitrary full-BZ k-point."""
         from paw import nonlq
 
         key = _frac_key(kvec)
@@ -636,6 +841,7 @@ class _PawOrthHelper:
         gvecs: np.ndarray,
         k_frac: Sequence[float],
     ) -> List[np.ndarray]:
+        """Project a full-BZ coefficient vector after remapping onto projector G vectors."""
         projector = self._projector_for_full_k(k_frac)
         coeff_arr = np.asarray(coeff, dtype=np.complex128).reshape(-1)
         gvecs_arr = np.asarray(gvecs, dtype=int)
@@ -653,7 +859,97 @@ class _PawOrthHelper:
             for iatom in range(self.natoms)
         ]
 
+    def _get_multipole_kernel_data(
+        self,
+        ngrid: Tuple[int, int, int],
+        q_frac: np.ndarray,
+        L_max_global: int,
+    ) -> Dict[str, Any]:
+        """Return cached geometry-dependent data for PAW compensation charges."""
+        q_frac_arr = np.asarray(q_frac, dtype=float)
+        cache_key = (
+            tuple(int(n) for n in ngrid),
+            tuple(float(round(x, 12)) for x in q_frac_arr),
+            int(L_max_global),
+        )
+        cached = self._multipole_kernel_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        nx, ny, nz = ngrid
+        q_cart = q_frac_arr @ (TPI * self._Bcell)
+        gx = (np.fft.fftfreq(nx) * nx).astype(float)
+        gy = (np.fft.fftfreq(ny) * ny).astype(float)
+        gz = (np.fft.fftfreq(nz) * nz).astype(float)
+        GX, GY, GZ = np.meshgrid(gx, gy, gz, indexing="ij")
+        G_frac = np.stack([GX, GY, GZ], axis=-1)
+        G_frac_flat = G_frac.reshape(-1, 3)
+        Gcart = G_frac @ (TPI * self._Bcell)
+        qpG_cart = (Gcart + q_cart).reshape(-1, 3)
+        qpGnorm = np.linalg.norm(qpG_cart, axis=-1)
+        mask_nz = qpGnorm > 1e-10
+        qpGnorm_safe = np.where(mask_nz, qpGnorm, 1.0)
+        qpGhat = qpG_cart / qpGnorm_safe[:, np.newaxis]
+        q_dot_R = TPI * (self._pos_frac @ q_frac_arr)
+        G_dot_R = TPI * (G_frac_flat @ self._pos_frac.T)
+        phase = np.exp(1j * (G_dot_R + q_dot_R[np.newaxis, :]))
+        ylm_grid: Dict[Tuple[int, int], np.ndarray] = {}
+        for L in range(L_max_global + 1):
+            YLM_all = _sph_r(qpGhat, L)
+            for M_idx, M in enumerate(range(-L, L + 1)):
+                ylm_grid[(L, M)] = YLM_all[:, M_idx]
+        cached = {"qpGnorm": qpGnorm, "mask_nz": mask_nz, "phase": phase, "ylm_grid": ylm_grid}
+        self._multipole_kernel_cache[cache_key] = cached
+        return cached
+
+    def _compensation_charge_G(
+        self,
+        ngrid: Tuple[int, int, int],
+        q_frac: np.ndarray,
+        beta_src_left: Optional[List[np.ndarray]],
+        beta_src_right: Optional[List[np.ndarray]],
+    ) -> np.ndarray:
+        """Build the PAW compensation charge on the FFT grid for one source pair."""
+        if beta_src_left is None or beta_src_right is None:
+            return np.zeros(tuple(int(n) for n in ngrid), dtype=np.complex128)
+        grid_shape = tuple(int(n) for n in ngrid)
+        N = int(np.prod(grid_shape))
+        q_frac_arr = np.asarray(q_frac, dtype=float)
+        L_max_global = max(max(l for (_n, l, _m) in pp.ilm) * 2 for pp in self.pawpp)
+        kernel_data = self._get_multipole_kernel_data(grid_shape, q_frac_arr, L_max_global)
+        qpGnorm = kernel_data["qpGnorm"]
+        mask_nz = kernel_data["mask_nz"]
+        phase = kernel_data["phase"]
+        ylm_grid = kernel_data["ylm_grid"]
+        delta_rho = np.zeros(N, dtype=np.complex128)
+        scale = N / self._Omega
+        for iatom in range(self.natoms):
+            ntype = self.element_idx[iatom]
+            pp = self.pawpp[ntype]
+            rcomp = pp.rcomp
+            Q_lm = self._Qij_lm_per_type[ntype]
+            l_max = max(l for (_n, l, _m) in pp.ilm)
+            L_max = 2 * l_max
+            n_LM = (L_max + 1) ** 2
+            q_vec = _depsum_two_bands_rholm_trace_py(
+                beta_src_left[iatom],
+                beta_src_right[iatom],
+                Q_lm[:n_LM],
+            )
+            phase_atom = phase[:, iatom]
+            for L in range(L_max + 1):
+                iL = (1j) ** L
+                coeff_L = 4.0 * np.pi * iL / (2.0 * L + 1.0)
+                jL_vals = _spherical_jn(L, qpGnorm * rcomp)
+                jL_vals = np.where(mask_nz, jL_vals, (1.0 if L == 0 else 0.0))
+                for M in range(-L, L + 1):
+                    lm_idx = L * L + L + M
+                    if abs(q_vec[lm_idx]) < 1e-20:
+                        continue
+                    delta_rho += scale * q_vec[lm_idx] * coeff_L * jL_vals * ylm_grid[(L, M)] * phase_atom
+        return delta_rho.reshape(grid_shape)
+
     def _resolve_source_trans_matrix_dump_path(self) -> Optional[Path]:
+        """Locate BSE_TRANS_MATRIX_FOCK.bin near the example inputs."""
         if self._source_trans_dump_path is not None:
             return self._source_trans_dump_path
         for directory in self._search_dirs:
@@ -664,17 +960,17 @@ class _PawOrthHelper:
         return None
 
     def _get_source_trans_matrix_dump(self) -> TransMatrixDump:
+        """Load TRANS_MATRIX_FOCK from the nearest VASP dump."""
         if self._source_trans_dump is not None:
             return self._source_trans_dump
         dump_path = self._resolve_source_trans_matrix_dump_path()
         if dump_path is None or not dump_path.exists():
-            raise FileNotFoundError(
-                "direct_source_paw now requires BSE_TRANS_MATRIX_FOCK.bin next to the example inputs"
-            )
+            raise FileNotFoundError("paw_full requires BSE_TRANS_MATRIX_FOCK.bin next to the example inputs")
         self._source_trans_dump = read_bse_trans_matrix_dump(dump_path)
         return self._source_trans_dump
 
     def _resolve_source_fastaug_dump_path(self) -> Optional[Path]:
+        """Locate BSE_FASTAUG_FOCK.bin near the example inputs."""
         if self._source_fastaug_dump_path is not None:
             return self._source_fastaug_dump_path
         for directory in self._search_dirs:
@@ -686,19 +982,21 @@ class _PawOrthHelper:
         return None
 
     def _get_source_fastaug_dump(self) -> FastAugSourceDump:
+        """Load the dumped FAST_AUG support and basis data."""
         if self._source_fastaug_dump is not None:
             return self._source_fastaug_dump
         dump_path = self._resolve_source_fastaug_dump_path()
         if dump_path is None or not dump_path.exists():
             raise FileNotFoundError(
-                "direct_source_paw exact FAST_AUG mode requires BSE_FAST_AUG_FOCK.bin "
-                "(or legacy BSE_FASTAUG_FOCK.bin) next to the example inputs"
+                "paw_full requires BSE_FASTAUG_FOCK.bin "
+                "(or legacy BSE_FAST_AUG_FOCK.bin) next to the example inputs"
             )
         self._source_fastaug_dump = read_bse_fastaug_source_dump(dump_path)
         return self._source_fastaug_dump
 
     @staticmethod
     def _hash_beta_list(hasher: "hashlib._Hash", beta_list: Optional[List[np.ndarray]]) -> None:
+        """Hash one projector-block list into a stable source-augmentation cache key."""
         if beta_list is None:
             hasher.update(b"none")
             return
@@ -715,6 +1013,7 @@ class _PawOrthHelper:
         beta_src_left: Optional[List[np.ndarray]],
         beta_src_right: Optional[List[np.ndarray]],
     ) -> str:
+        """Build a content hash for exact FAST_AUG source augmentation."""
         hasher = hashlib.sha256()
         hasher.update(np.asarray(tuple(int(n) for n in ngrid), dtype=np.int64).tobytes())
         hasher.update(np.asarray(q_frac, dtype=np.float64).tobytes())
@@ -728,6 +1027,7 @@ class _PawOrthHelper:
         beta_left: List[np.ndarray],
         beta_right: List[np.ndarray],
     ) -> List[np.ndarray]:
+        """Build per-atom FAST_AUG source coefficients using TRANS_MATRIX_FOCK."""
         blocks: List[np.ndarray] = []
         for iatom in range(self.natoms):
             ntype = self.element_idx[iatom]
@@ -751,6 +1051,7 @@ class _PawOrthHelper:
         beta_src_left: Optional[List[np.ndarray]],
         beta_src_right: Optional[List[np.ndarray]],
     ) -> np.ndarray:
+        """Rebuild the VASP FAST_AUG source object exactly on the dumped GRIDHF support."""
         rho_pw = np.asarray(rho_G, dtype=np.complex128)
         if beta_src_left is None or beta_src_right is None:
             return np.array(rho_pw, copy=True)
@@ -770,12 +1071,9 @@ class _PawOrthHelper:
                 raise ValueError(
                     f"FAST_AUG source grid {fastaug_dump.grid_shape} does not match requested grid {grid_shape}"
                 )
-            coeff_blocks = self._build_full_crholm_blocks(
-                trans_dump,
-                beta_src_left,
-                beta_src_right,
-            )
+            coeff_blocks = self._build_full_crholm_blocks(trans_dump, beta_src_left, beta_src_right)
             aug_r = np.zeros(grid_shape, dtype=np.complex128)
+            q_arr = np.asarray(q_frac, dtype=float)
             for record in fastaug_dump.records:
                 atom_index = int(record.iatom) - 1
                 coeff = np.asarray(coeff_blocks[atom_index], dtype=np.complex128)
@@ -784,9 +1082,7 @@ class _PawOrthHelper:
                     continue
                 work = np.asarray(record.rproj[:, :lm_count] @ coeff[:lm_count], dtype=np.complex128)
                 if record.xfrac is not None:
-                    scatter_phase = np.exp(
-                        1j * 2.0 * np.pi * (np.asarray(record.xfrac, dtype=np.float64) @ np.asarray(q_frac, dtype=float))
-                    )
+                    scatter_phase = np.exp(1j * 2.0 * np.pi * (np.asarray(record.xfrac, dtype=np.float64) @ q_arr))
                 elif record.crrexp is not None:
                     scatter_phase = np.conj(np.asarray(record.crrexp, dtype=np.complex128))
                 else:
@@ -807,6 +1103,7 @@ class _PawOrthHelper:
         beta_src_left: Optional[List[np.ndarray]] = None,
         beta_src_right: Optional[List[np.ndarray]] = None,
     ) -> np.ndarray:
+        """Upgrade a PW source density with the exact VASP FAST_AUG source object."""
         return self._exact_fastaug_source_density_G(
             rho_G,
             q_frac,
@@ -814,9 +1111,10 @@ class _PawOrthHelper:
             beta_src_right=beta_src_right,
         )
 
-
 class HartreeFullGridBuilder:
-    def __init__(self, *, wavecar_path: Path, outcar_path: Path, kpoints_path: Path, q_ext: Sequence[float], vb_num: Optional[int], cb_num: Optional[int], ewin: Optional[Tuple[float, float]], mode: str, poscar_path: Optional[Path], potcar_path: Optional[Path], charge_grid: Optional[Sequence[int]], wfc_ifft_scale: str, interaction: str, epsilon: Optional[float], use_response_basis: bool, direct_source_paw: bool = False, verbose: bool = False) -> None:
+    """Assemble the BSE matrix directly on the real-space FFT grid."""
+    def __init__(self, *, wavecar_path: Path, outcar_path: Path, kpoints_path: Path, q_ext: Sequence[float], vb_num: Optional[int], cb_num: Optional[int], ewin: Optional[Tuple[float, float]], mode: str, poscar_path: Optional[Path], potcar_path: Optional[Path], charge_grid: Optional[Sequence[int]], wfc_ifft_scale: str, interaction: str, epsilon: Optional[float], use_response_basis: bool, verbose: bool = False) -> None:
+        """Load wavefunction metadata, symmetry data, caches, and PAW helpers."""
         self.wavecar_path = Path(wavecar_path).resolve()
         self.outcar_path = Path(outcar_path).resolve()
         self.kpoints_path = Path(kpoints_path).resolve()
@@ -831,11 +1129,8 @@ class HartreeFullGridBuilder:
             raise ValueError("interaction must be one of {'hartree', 'direct', 'both'}")
         self.epsilon = None if epsilon is None else float(epsilon)
         self.use_response_basis = bool(use_response_basis)
-        self.direct_source_paw = bool(direct_source_paw)
         if self.epsilon is not None and self.epsilon <= 0.0:
             raise ValueError("epsilon must be positive")
-        if self.direct_source_paw and self.mode != "paw_orth_only":
-            raise ValueError("direct_source_paw requires mode='paw_orth_only'")
         self.occ_threshold = 0.5
         self.wfc_ifft_scale = str(wfc_ifft_scale).strip()
         if self.wfc_ifft_scale not in {"sqrtN", "N", "none"}:
@@ -912,16 +1207,31 @@ class HartreeFullGridBuilder:
         self.pairs: List[PairState] = []
 
         self._paw: Optional[_PawOrthHelper] = None
-        if self.mode == "paw_orth_only":
+        if self.mode in {"paw_orth_only", "paw_full"}:
             if poscar_path is None or potcar_path is None:
-                raise FileNotFoundError("paw_orth_only requires POSCAR and POTCAR")
-            self._paw = _PawOrthHelper(poscar_path=Path(poscar_path).resolve(), potcar_path=Path(potcar_path).resolve(), wfc=self.wfc, ir_kvecs=self._ir_kvecs, lgamma=getattr(self.wfc, "_lgam", False), gamma_half=getattr(self.wfc, "_gam_half", "x"), search_dirs=self._search_dirs)
+                raise FileNotFoundError(f"{self.mode} requires POSCAR and POTCAR")
+            self._paw = _PawOrthHelper(
+                poscar_path=Path(poscar_path).resolve(),
+                potcar_path=Path(potcar_path).resolve(),
+                wfc=self.wfc,
+                ir_kvecs=self._ir_kvecs,
+                lgamma=getattr(self.wfc, "_lgam", False),
+                gamma_half=getattr(self.wfc, "_gam_half", "x"),
+                search_dirs=self._search_dirs,
+            )
+            if self.mode == "paw_full":
+                fastaug_dump = self._paw._get_source_fastaug_dump()
+                self.ngrid = tuple(int(n) for n in fastaug_dump.grid_shape)
+                self.Nfft = int(np.prod(self.ngrid))
+                self._Gcart_grid = self._build_Gcart_grid()
 
     def _log(self, msg: str) -> None:
+        """Emit a progress message when verbose logging is enabled."""
         if self.verbose:
             print(msg, flush=True)
 
     def _infer_kpoint_weight(self) -> float:
+        """Infer the per-k-point weight from KPOINTS or fall back to 1/nk."""
         try:
             lines = [line.strip() for line in self.kpoints_path.read_text().splitlines()]
         except OSError:
@@ -936,6 +1246,7 @@ class HartreeFullGridBuilder:
         return 1.0 / max(self._nkpts, 1)
 
     def orthogonalize_pair_subspaces(self) -> None:
+        """Orthogonalize each irreducible-k band manifold in the active overlap metric."""
         self._wfc_cache.clear()
         self._grid_wfc_cache.clear()
         self._matched_wfc_cache.clear()
@@ -983,7 +1294,7 @@ class HartreeFullGridBuilder:
                     )
                 coeff_mat = np.column_stack(coeff_cols)
                 overlap_mat = coeff_mat.conj().T @ coeff_mat
-                if self._paw is not None:
+                if self.mode == "paw_orth_only" and self._paw is not None:
                     proj_cols = [self._paw.get_proj(ispin, ik, iband, coeff_cols[idx]) for idx, iband in enumerate(band_list)]
                     overlap_mat += self._projector_overlap_block(proj_cols)
                 overlap_mat = 0.5 * (overlap_mat + overlap_mat.conj().T)
@@ -995,6 +1306,7 @@ class HartreeFullGridBuilder:
         self._orth_ready = True
 
     def _projector_overlap_block(self, proj_cols: Sequence[Sequence[np.ndarray]]) -> np.ndarray:
+        """Assemble the PAW overlap correction matrix for one band block."""
         if self._paw is None:
             raise RuntimeError("Projector overlap requested without PAW helper")
         nbands = len(proj_cols)
@@ -1008,6 +1320,7 @@ class HartreeFullGridBuilder:
 
     @staticmethod
     def _inverse_cholesky_upper(overlap_mat: np.ndarray) -> np.ndarray:
+        """Return the inverse upper-triangular Cholesky factor of an overlap matrix."""
         try:
             lower = np.linalg.cholesky(overlap_mat)
         except np.linalg.LinAlgError:
@@ -1016,10 +1329,12 @@ class HartreeFullGridBuilder:
         return np.linalg.inv(lower.conj().T)
 
     def _ensure_orthogonalized_wavefunctions(self) -> None:
+        """Run the orthogonalization pass once before matrix assembly."""
         if not self._orth_ready:
             self.orthogonalize_pair_subspaces()
 
     def _load_symmetry_ops(self) -> List[SymmetryOp]:
+        """Load symmetry operators from the nearest available OUTCAR file."""
         for dpath in self._search_dirs:
             for name in ("OUTCAR.symm", "OUTCAR"):
                 candidate = dpath / name
@@ -1032,24 +1347,43 @@ class HartreeFullGridBuilder:
         return [SymmetryOp(irot=1, real_matrix=ident, reciprocal_matrix=ident, tau_frac=np.zeros(3, dtype=float))]
 
     def _store_expanded_match(self, k_frac: np.ndarray, match: KpointMatch) -> None:
+        """Store the best irreducible-k match for an expanded k-point."""
         key = _frac_key(k_frac)
         current = self._expanded_kpoint_lookup.get(key)
         if current is None or _kpoint_match_priority(match) < _kpoint_match_priority(current):
             self._expanded_kpoint_lookup[key] = match
 
     def _store_full_bz_match(self, k_frac: np.ndarray, match: KpointMatch) -> None:
+        """Store the preferred full-BZ match for a wrapped fractional point."""
         key = _frac_key(k_frac)
         current = self._full_bz_lookup.get(key)
         if current is None or _kpoint_match_priority(match) < _kpoint_match_priority(current):
             self._full_bz_lookup[key] = match
 
     def _store_full_bz_index(self, k_frac: np.ndarray, full_index: int) -> None:
+        """Remember the VASP full-BZ loop index for one k-point."""
         self._full_bz_index_lookup[_frac_key(k_frac)] = int(full_index)
 
     def _full_bz_index(self, k_frac: Sequence[float]) -> Optional[int]:
-        return self._full_bz_index_lookup.get(_frac_key(k_frac))
+        """Look up the VASP full-BZ loop index of a wrapped k-point.
+
+        Finite-q examples can mix truncated decimal coordinates from OUTCAR with
+        exact fractional arithmetic from `q_ext`, so the exact hash lookup needs
+        a tolerance-based fallback.
+        """
+        key = _frac_key(k_frac)
+        direct = self._full_bz_index_lookup.get(key)
+        if direct is not None:
+            return direct
+        target = _wrap_frac(np.asarray(k_frac, dtype=float))
+        for full_k in self.full_kpoints:
+            diff = _wrap_frac_signed(np.asarray(full_k.k_frac, dtype=float) - target)
+            if float(np.max(np.abs(diff))) <= 5e-5:
+                return int(full_k.full_index)
+        return None
 
     def _build_expanded_kpoint_lookup(self) -> None:
+        """Expand irreducible k-points through symmetry and time reversal."""
         for ik, kvec in enumerate(np.asarray(self._ir_kvecs, dtype=float), start=1):
             for isym, op in enumerate(self.symm_ops):
                 k_symm = _wrap_frac(op.reciprocal_matrix @ kvec)
@@ -1065,6 +1399,7 @@ class HartreeFullGridBuilder:
         self._expanded_kpoint_coords_arr = np.asarray(self._expanded_kpoint_coords, dtype=float)
 
     def _resolve_symmetry_match(self, target_k: np.ndarray, ikpt: int, time_reversed: bool = False, tol: float = 5e-5) -> Optional[KpointMatch]:
+        """Resolve which symmetry operator maps one irreducible point to target_k."""
         base_k = np.asarray(self._ir_kvecs[ikpt - 1], dtype=float)
         if time_reversed:
             base_k = -base_k
@@ -1084,6 +1419,7 @@ class HartreeFullGridBuilder:
         return tied[0][1]
 
     def _best_kpoint_match(self, k_frac: np.ndarray, coords: np.ndarray, matches: Sequence[KpointMatch], tol: float = 5e-5) -> Optional[KpointMatch]:
+        """Pick the nearest stored k-point match subject to the VASP-style priority order."""
         if coords.size == 0:
             return None
         diff = _wrap_frac_signed(coords - k_frac[np.newaxis, :])
@@ -1096,6 +1432,7 @@ class HartreeFullGridBuilder:
         return matches[int(idx)]
 
     def _load_full_bz_kpoints(self) -> List[FullBZKpoint]:
+        """Build the full-BZ k-point loop used by VASP BSE storage conventions."""
         entries: List[FullBZKpoint] = []
         seen: set[Tuple[float, ...]] = set()
         for dpath in self._search_dirs:
@@ -1166,6 +1503,7 @@ class HartreeFullGridBuilder:
         return entries
 
     def _match_full_kpoint(self, k_frac: np.ndarray) -> Optional[KpointMatch]:
+        """Match a wrapped full-BZ point to the stored irreducible-k representation."""
         k_arr = _wrap_frac(np.asarray(k_frac, dtype=float))
         cache_key = _frac_key(k_arr)
         cached = self._resolved_kpoint_cache.get(cache_key)
@@ -1190,6 +1528,7 @@ class HartreeFullGridBuilder:
         return None
 
     def _raw_band_coeff(self, ispin: int, ik: int, iband: int) -> np.ndarray:
+        """Read one raw WAVECAR coefficient vector and normalize its shape."""
         coeff = self.wfc.readBandCoeff(ispin=ispin, ikpt=ik, iband=iband, norm=False)
         if np.iscomplexobj(coeff) and np.ndim(coeff) == 2:
             coeff = coeff[:, 0]
@@ -1200,6 +1539,7 @@ class HartreeFullGridBuilder:
         return coeff_arr
 
     def _matched_gvecs_and_coeffs(self, ispin: int, ik: int, iband: int, *, time_reversed: bool, symm_op: int, k_frac: Sequence[float]) -> Tuple[np.ndarray, np.ndarray]:
+        """Remap one state onto the G-vector basis of a requested full-BZ k-point."""
         coeff = self._orth_coeff_cache.get((ispin, ik, iband))
         if coeff is None:
             coeff = self._raw_band_coeff(ispin, ik, iband)
@@ -1246,6 +1586,7 @@ class HartreeFullGridBuilder:
         return gvec_target_i, coeff_arr
 
     def _coeff_on_grid(self, ispin: int, ik: int, iband: int, *, time_reversed: bool = False, symm_op: int = 0, k_frac: Optional[Sequence[float]] = None, grid_shape: Optional[Sequence[int]] = None) -> np.ndarray:
+        """Scatter plane-wave coefficients onto an FFT grid."""
         target_grid = self.ngrid if grid_shape is None else tuple(int(n) for n in grid_shape)
         if k_frac is None:
             gvecs = self.wfc.gvectors(ikpt=ik, check_consistency=False)
@@ -1272,6 +1613,7 @@ class HartreeFullGridBuilder:
         return c_grid
 
     def _get_periodic_wfc(self, ispin: int, ik: int, iband: int, *, time_reversed: bool = False, symm_op: int = 0, k_frac: Optional[Sequence[float]] = None, grid_shape: Optional[Sequence[int]] = None) -> np.ndarray:
+        """Reconstruct the cell-periodic wavefunction on the requested FFT grid."""
         target_grid = self.ngrid if grid_shape is None else tuple(int(n) for n in grid_shape)
         if k_frac is None:
             if target_grid == self.ngrid:
@@ -1324,6 +1666,7 @@ class HartreeFullGridBuilder:
         symm_op: int = 0,
         k_frac: Optional[Sequence[float]] = None,
     ) -> List[np.ndarray]:
+        """Project one state onto PAW projectors in either IR or full-BZ form."""
         if self._paw is None:
             raise RuntimeError("Projector overlaps requested without PAW helper")
         if k_frac is None:
@@ -1337,14 +1680,7 @@ class HartreeFullGridBuilder:
         if cached is not None:
             return cached
         if time_reversed and symm_op == 0:
-            raw_blocks = self._get_state_projectors(
-                ispin,
-                ik,
-                iband,
-                time_reversed=False,
-                symm_op=0,
-                k_frac=None,
-            )
+            raw_blocks = self._get_state_projectors(ispin, ik, iband, k_frac=None)
             projected = [np.conj(np.asarray(block, dtype=np.complex128)) for block in raw_blocks]
             self._matched_proj_cache[cache_key] = projected
             return projected
@@ -1367,19 +1703,22 @@ class HartreeFullGridBuilder:
         beta_src_left: Optional[List[np.ndarray]] = None,
         beta_src_right: Optional[List[np.ndarray]] = None,
     ) -> np.ndarray:
-        if not self.direct_source_paw or self._paw is None:
-            return np.asarray(rho_G, dtype=np.complex128)
-        return self._paw.effective_source_density_G(
-            rho_G,
-            q_frac,
-            beta_src_left=beta_src_left,
-            beta_src_right=beta_src_right,
-        )
+        """Return the source density used by the Coulomb contraction."""
+        if self.mode == "paw_full" and self._paw is not None:
+            return self._paw.effective_source_density_G(
+                rho_G,
+                q_frac,
+                beta_src_left=beta_src_left,
+                beta_src_right=beta_src_right,
+            )
+        return np.asarray(rho_G, dtype=np.complex128)
 
     def _pair_density_G(self, u_left: np.ndarray, u_right: np.ndarray) -> np.ndarray:
+        """Build the pair density rho(G) = FFT[u_left^* u_right]."""
         return fftn(np.conj(u_left) * u_right)
 
     def _build_Gcart_grid(self) -> np.ndarray:
+        """Construct the Cartesian G-grid corresponding to the FFT mesh."""
         nx, ny, nz = self.ngrid
         gx = np.fft.fftfreq(nx) * nx
         gy = np.fft.fftfreq(ny) * ny
@@ -1388,6 +1727,7 @@ class HartreeFullGridBuilder:
         return np.stack([GX, GY, GZ], axis=-1) @ (TPI * self.Bcell)
 
     def _coulomb_kernel(self, q_frac: np.ndarray) -> np.ndarray:
+        """Return the bare Coulomb kernel 4pi/|q+G|^2 on the FFT grid."""
         q_arr = np.asarray(q_frac, dtype=float)
         q_cart = q_arr @ (TPI * self.Bcell)
         qpG_cart = self._Gcart_grid + q_cart[np.newaxis, np.newaxis, np.newaxis, :]
@@ -1396,6 +1736,7 @@ class HartreeFullGridBuilder:
             return np.where(qpGsq > 0.0, EDEPS / qpGsq, 0.0)
 
     def _screened_kernel(self, q_frac: np.ndarray) -> np.ndarray:
+        """Return the diagonal screened kernel, falling back to bare Coulomb."""
         cache_key = _wrap_frac_signed_key(q_frac)
         cached = self._screened_kernel_cache.get(cache_key)
         if cached is not None:
@@ -1411,6 +1752,7 @@ class HartreeFullGridBuilder:
         return kernel
 
     def _response_gvectors_for_kfrac(self, k_frac: Sequence[float]) -> np.ndarray:
+        """Generate response-basis G vectors at a given k-point using ENCUTGW."""
         original_encut = float(self.wfc._encut)
         try:
             self.wfc._encut = float(self.encutgw)
@@ -1419,11 +1761,13 @@ class HartreeFullGridBuilder:
             self.wfc._encut = original_encut
 
     def _response_basis_values(self, values_G: np.ndarray, gvecs: np.ndarray) -> np.ndarray:
+        """Sample a full-grid G object on the selected response-basis vectors."""
         nx, ny, nz = self.ngrid
         values_arr = np.asarray(values_G, dtype=np.complex128)
         return np.asarray(values_arr[gvecs[:, 0] % nx, gvecs[:, 1] % ny, gvecs[:, 2] % nz], dtype=np.complex128)
 
     def _response_basis_gvectors_for_q(self, q_frac: np.ndarray) -> Optional[np.ndarray]:
+        """Return response-basis G vectors for one momentum transfer."""
         if self.encutgw is None:
             return None
         screened_operator = self._screened_operator_on_response_basis(q_frac)
@@ -1433,6 +1777,7 @@ class HartreeFullGridBuilder:
         return np.asarray(self._response_gvectors_for_kfrac(q_target), dtype=int)
 
     def _screened_operator_on_response_basis(self, q_frac: np.ndarray) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+        """Load the full screened interaction matrix on the response basis for q."""
         if self.encutgw is None:
             return None
         cache_key = _wrap_frac_signed_key(q_frac)
@@ -1478,6 +1823,7 @@ class HartreeFullGridBuilder:
         return result
 
     def _screened_kernel_from_dump(self, q_frac: np.ndarray) -> Optional[np.ndarray]:
+        """Load the diagonal screened kernel from WFULL/W on the FFT mesh."""
         if self.encutgw is None:
             return None
         match = self._match_full_kpoint(_wrap_frac(q_frac))
@@ -1514,6 +1860,7 @@ class HartreeFullGridBuilder:
         return kernel
 
     def _response_gvectors(self, ikpt: int) -> np.ndarray:
+        """Return the response-basis G vectors for one irreducible q index."""
         original_encut = float(self.wfc._encut)
         try:
             self.wfc._encut = float(self.encutgw)
@@ -1523,6 +1870,7 @@ class HartreeFullGridBuilder:
 
     @staticmethod
     def _setphase_integer_shift(setphase_shift_frac: np.ndarray, tol: float = 1e-6) -> Tuple[int, int, int]:
+        """Convert a fractional SETPHASE shift into exact integer grid offsets."""
         shift = np.asarray(setphase_shift_frac, dtype=float)
         rounded = np.rint(shift)
         if np.max(np.abs(shift - rounded)) > tol:
@@ -1530,6 +1878,7 @@ class HartreeFullGridBuilder:
         return int(rounded[0]), int(rounded[1]), int(rounded[2])
 
     def _get_setphase_grid(self, shift_int: Tuple[int, int, int]) -> np.ndarray:
+        """Build and cache the real-space phase factor for a SETPHASE shift."""
         cached = self._setphase_grid_cache.get(shift_int)
         if cached is not None:
             return cached
@@ -1543,6 +1892,7 @@ class HartreeFullGridBuilder:
         return phase
 
     def _apply_setphase_to_G_object(self, values_G: np.ndarray, setphase_shift_frac: Optional[np.ndarray]) -> np.ndarray:
+        """Apply VASP's SETPHASE convention to a reciprocal-space object."""
         values_arr = np.asarray(values_G, dtype=np.complex128)
         if setphase_shift_frac is None:
             return values_arr
@@ -1553,6 +1903,7 @@ class HartreeFullGridBuilder:
         return np.asarray(fftn(ifftn(values_arr) * phase), dtype=np.complex128)
 
     def build_pair_indices(self) -> List[PairState]:
+        """Enumerate the electron-hole pair basis used for the BSE matrix."""
         self.pairs = []
         for ispin in range(1, self._nspin + 1):
             occs = self.wfc._occs[ispin - 1]
@@ -1598,10 +1949,14 @@ class HartreeFullGridBuilder:
                         self.pairs.append(PairState(iv=iv0 + 1, ic=ic0 + 1, ik=ik1_full, ik3=ik3_full, ik_ir=ik1_ir, ik3_ir=ik3_ir, ispin=ispin, eps_v=eps_v, eps_c=eps_c, k1_frac=tuple(float(x) for x in k1_frac.tolist()), k3_frac=tuple(float(x) for x in k3_frac.tolist()), k1_time_reversed=k1_match.time_reversed, k3_time_reversed=k3_match.time_reversed, k1_symm_op=k1_match.symm_op, k3_symm_op=k3_match.symm_op))
         if not self.pairs:
             raise RuntimeError("No valid electron-hole pairs found")
+        # Match VASP pair-basis ordering consistently for both q=0 and finite-q:
+        # spin -> full-BZ source k -> full-BZ target k -> conduction band -> valence band.
+        self.pairs.sort(key=lambda pair: (pair.ispin, pair.ik, pair.ik3, pair.ic, pair.iv))
         self._log(f"Number of BSE pair states: {len(self.pairs)}")
         return self.pairs
 
     def _full_k_loop_position(self, k_frac: Sequence[float]) -> int:
+        """Return the position of a k-point in the VASP full-BZ loop ordering."""
         key = _frac_key(_wrap_frac(k_frac))
         for idx, full_k in enumerate(self.full_kpoints):
             if _frac_key(_wrap_frac(full_k.k_frac)) == key:
@@ -1609,6 +1964,7 @@ class HartreeFullGridBuilder:
         raise KeyError(f"Unknown full-BZ k-point: {tuple(k_frac)}")
 
     def _should_store_vasp_bse_entry(self, pair_i: PairState, pair_j: PairState) -> bool:
+        """Apply VASP's half-storage rule for dense BSE matrix output."""
         if pair_j.ispin < pair_i.ispin:
             return False
         if pair_j.ispin > pair_i.ispin:
@@ -1616,6 +1972,7 @@ class HartreeFullGridBuilder:
         return self._full_k_loop_position(pair_j.k1_frac) >= self._full_k_loop_position(pair_i.k1_frac)
 
     def build_bse_matrix(self, *, vasp_storage: bool) -> np.ndarray:
+        """Assemble the excitonic Hamiltonian in the current pair basis."""
         self._ensure_orthogonalized_wavefunctions()
         npairs = len(self.pairs)
         A = np.zeros((npairs, npairs), dtype=np.complex128)
@@ -1635,7 +1992,7 @@ class HartreeFullGridBuilder:
             u_c3 = self._get_periodic_wfc(pair_i.ispin, pair_i.ik3_ir, pair_i.ic, time_reversed=pair_i.k3_time_reversed, symm_op=pair_i.k3_symm_op, k_frac=pair_i.k3_frac)
             beta_v1 = None
             beta_c3 = None
-            if (use_direct or use_hartree) and self.direct_source_paw and self._paw is not None:
+            if self.mode == "paw_full" and self._paw is not None:
                 beta_v1 = self._get_state_projectors(pair_i.ispin, pair_i.ik_ir, pair_i.iv, time_reversed=pair_i.k1_time_reversed, symm_op=pair_i.k1_symm_op, k_frac=pair_i.k1_frac)
                 beta_c3 = self._get_state_projectors(pair_i.ispin, pair_i.ik3_ir, pair_i.ic, time_reversed=pair_i.k3_time_reversed, symm_op=pair_i.k3_symm_op, k_frac=pair_i.k3_frac)
             hartree_left = None
@@ -1665,7 +2022,7 @@ class HartreeFullGridBuilder:
                 u_c4 = self._get_periodic_wfc(pair_j.ispin, pair_j.ik3_ir, pair_j.ic, time_reversed=pair_j.k3_time_reversed, symm_op=pair_j.k3_symm_op, k_frac=pair_j.k3_frac)
                 beta_v2 = None
                 beta_c4 = None
-                if (use_direct or use_hartree) and self.direct_source_paw and self._paw is not None:
+                if self.mode == "paw_full" and self._paw is not None:
                     beta_v2 = self._get_state_projectors(pair_j.ispin, pair_j.ik_ir, pair_j.iv, time_reversed=pair_j.k1_time_reversed, symm_op=pair_j.k1_symm_op, k_frac=pair_j.k1_frac)
                     beta_c4 = self._get_state_projectors(pair_j.ispin, pair_j.ik3_ir, pair_j.ic, time_reversed=pair_j.k3_time_reversed, symm_op=pair_j.k3_symm_op, k_frac=pair_j.k3_frac)
                 if use_hartree:
@@ -1731,12 +2088,14 @@ class HartreeFullGridBuilder:
 
 
 def _parse_q_ext(values: list[float]) -> np.ndarray:
+    """Parse the external exciton momentum from CLI input."""
     if len(values) != 3:
         raise ValueError("q_ext must have exactly three fractional components")
     return np.asarray(values, dtype=float)
 
 
 def _pair_metadata_array(pairs: list[PairState]) -> np.ndarray:
+    """Pack pair metadata into a structured array for NPZ output."""
     dtype = np.dtype(
         [
             ("iv", np.int32),
@@ -1779,6 +2138,7 @@ def _pair_metadata_array(pairs: list[PairState]) -> np.ndarray:
 
 
 def _write_text_matrix(path: Path, matrix: np.ndarray, *, mode: str, q_ext: np.ndarray, vasp_storage: bool) -> None:
+    """Write the assembled BSE matrix in a simple text format."""
     with path.open("w", encoding="utf-8") as handle:
         handle.write("# AMAT exchange matrix\n")
         handle.write(f"# mode {mode}\n")
@@ -1797,6 +2157,7 @@ def _write_text_matrix(path: Path, matrix: np.ndarray, *, mode: str, q_ext: np.n
 
 
 def _masked_vasp_storage_matrix(builder: HartreeFullGridBuilder, matrix: np.ndarray) -> np.ndarray:
+    """Zero entries that VASP would omit in its half-stored dense layout."""
     masked = np.asarray(matrix, dtype=np.complex128).copy()
     for i, pair_i in enumerate(builder.pairs):
         for j, pair_j in enumerate(builder.pairs):
@@ -1805,21 +2166,8 @@ def _masked_vasp_storage_matrix(builder: HartreeFullGridBuilder, matrix: np.ndar
     return masked
 
 
-def _find_fastaug_grid(search_dirs: Sequence[Path]) -> Optional[Tuple[int, int, int]]:
-    seen: set[Path] = set()
-    for directory in search_dirs:
-        resolved = Path(directory).resolve()
-        if resolved in seen:
-            continue
-        seen.add(resolved)
-        for name in ("BSE_FAST_AUG_FOCK.bin", "BSE_FASTAUG_FOCK.bin"):
-            candidate = resolved / name
-            if candidate.exists():
-                return read_bse_fastaug_source_dump(candidate).grid_shape
-    return None
-
-
 def _diagonalize_bse_matrix(matrix: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    """Diagonalize the Hermitian part of the assembled BSE matrix."""
     hermitian = 0.5 * (np.asarray(matrix, dtype=np.complex128) + np.asarray(matrix, dtype=np.complex128).conj().T)
     eigenvalues, eigenvectors = np.linalg.eigh(hermitian)
     return np.asarray(eigenvalues, dtype=float), np.asarray(eigenvectors, dtype=np.complex128)
@@ -1834,6 +2182,7 @@ def _write_bsefatband(
     kpoint_weight: float,
     nexciton: int,
 ) -> None:
+    """Write a VASP-style BSEFATBAND file from eigenpairs."""
     ntrans = len(pairs)
     nwrite = min(int(nexciton), int(eigenvalues.shape[0]))
     ip_energies = np.sort(np.asarray([pair.excitation_energy for pair in pairs], dtype=float))
@@ -1858,6 +2207,7 @@ def _write_bsefatband(
 
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
+    """Build the command-line interface for the standalone script."""
     parser = argparse.ArgumentParser(
         description="Build Hartree/direct BSE matrix elements using the local full-grid path.",
         formatter_class=_DefaultsFormatter,
@@ -1867,7 +2217,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--kpoints", default="KPOINTS", help="Path to KPOINTS")
     parser.add_argument("--poscar", default="POSCAR", help="Path to POSCAR")
     parser.add_argument("--potcar", default="POTCAR", help="Path to POTCAR")
-    parser.add_argument("--mode", choices=["pw_only", "paw_orth_only"], default="paw_orth_only", help="Matrix construction mode")
+    parser.add_argument("--mode", choices=["pw_only", "paw_orth_only", "paw_full"], default="paw_orth_only", help="Matrix construction mode")
     parser.add_argument("--interaction", choices=["hartree", "direct", "both"], default="hartree", help="Which interaction term to assemble")
     parser.add_argument("--q-ext", nargs=3, type=float, metavar=("QX", "QY", "QZ"), default=[0.0, 0.0, 0.0], help="External exciton momentum in fractional reciprocal coordinates")
     parser.add_argument("--vb-num", type=int, required=True, help="Number of valence bands")
@@ -1879,12 +2229,12 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--nexciton", type=int, default=None, help="Number of lowest excitons to write into BSEFATBAND output")
     parser.add_argument("--bsefatband-output", default=None, help="Optional path for VASP-format BSEFATBAND output")
     parser.add_argument("--use-response-basis", action="store_true", help="Use selected response-basis screened operator for the direct term instead of full-grid contraction")
-    parser.add_argument("--direct-source-paw", action="store_true", help="Add VASP FOCK_CHARGE_NOINT PAW source augmentation to Hartree/direct pair densities in paw_orth_only mode")
     parser.add_argument("--verbose", action="store_true", help="Enable progress logging")
     return parser.parse_args(argv)
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
+    """Run the CLI entry point and emit AMAT/BSEFATBAND outputs."""
     if argv is None:
         argv = sys.argv[1:]
     else:
@@ -1895,23 +2245,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     wavecar = _resolve_existing_path(args.wavecar, label="WAVECAR")
     outcar = _resolve_existing_path(args.outcar, label="OUTCAR")
     kpoints = _resolve_existing_path(args.kpoints, label="KPOINTS")
-    poscar = _resolve_existing_path(args.poscar, label="POSCAR") if args.mode == "paw_orth_only" else None
-    potcar = _resolve_existing_path(args.potcar, label="POTCAR") if args.mode == "paw_orth_only" else None
+    poscar = _resolve_existing_path(args.poscar, label="POSCAR") if args.mode in {"paw_orth_only", "paw_full"} else None
+    potcar = _resolve_existing_path(args.potcar, label="POTCAR") if args.mode in {"paw_orth_only", "paw_full"} else None
     q_ext = _parse_q_ext(list(args.q_ext))
     charge_grid = _parse_outcar_charge_grid(outcar)
     if charge_grid is None:
         raise ValueError(f"Failed to read NGXF/NGYF/NGZF charge grid from OUTCAR: {outcar}")
-    if args.direct_source_paw:
-        fastaug_grid = _find_fastaug_grid(
-            [
-                wavecar.parent,
-                outcar.parent,
-                kpoints.parent,
-                *(path.parent for path in (poscar, potcar) if path is not None),
-            ]
-        )
-        if fastaug_grid is not None:
-            charge_grid = fastaug_grid
     builder = HartreeFullGridBuilder(
         wavecar_path=wavecar,
         outcar_path=outcar,
@@ -1928,7 +2267,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         interaction=args.interaction,
         epsilon=args.epsilon,
         use_response_basis=bool(args.use_response_basis),
-        direct_source_paw=bool(args.direct_source_paw),
         verbose=bool(args.verbose),
     )
     builder.build_pair_indices()
@@ -1941,7 +2279,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     npz_path = output_prefix.with_suffix(".npz")
     pair_table = _pair_metadata_array(builder.pairs)
     _write_text_matrix(txt_path, matrix_for_output, mode=args.mode, q_ext=q_ext, vasp_storage=not args.full_hermitian)
-    np.savez(npz_path, amat=matrix_for_output, pairs=pair_table, q_ext=q_ext, mode=np.asarray(args.mode), interaction=np.asarray(args.interaction), epsilon=np.asarray(args.epsilon if args.epsilon is not None else np.nan), ifft_scale=np.asarray("N"), implementation=np.asarray("full_grid_only"), response_basis=np.asarray(bool(args.use_response_basis)), direct_source_paw=np.asarray(bool(args.direct_source_paw)), vasp_storage=np.asarray(not args.full_hermitian), wavecar=np.asarray(str(wavecar)), outcar=np.asarray(str(outcar)), kpoints=np.asarray(str(kpoints)), charge_grid=np.asarray(charge_grid, dtype=np.int32))
+    implementation_tag = "full_grid_fastaug_source" if args.mode == "paw_full" else "full_grid_only"
+    np.savez(npz_path, amat=matrix_for_output, pairs=pair_table, q_ext=q_ext, mode=np.asarray(args.mode), interaction=np.asarray(args.interaction), epsilon=np.asarray(args.epsilon if args.epsilon is not None else np.nan), ifft_scale=np.asarray("N"), implementation=np.asarray(implementation_tag), response_basis=np.asarray(bool(args.use_response_basis)), vasp_storage=np.asarray(not args.full_hermitian), wavecar=np.asarray(str(wavecar)), outcar=np.asarray(str(outcar)), kpoints=np.asarray(str(kpoints)), charge_grid=np.asarray(builder.ngrid, dtype=np.int32))
     eigenvalues, eigenvectors = _diagonalize_bse_matrix(matrix_full)
     bsefatband_path = Path(args.bsefatband_output).expanduser().resolve() if args.bsefatband_output else None
     if bsefatband_path is not None:
@@ -1959,17 +2298,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(f"epsilon         : {args.epsilon}")
     elif args.interaction in {"direct", "both"}:
         print("epsilon         : auto (WFULL/W if found, else bare Coulomb)")
-    print("implementation  : full_grid_only")
+    print(f"implementation  : {implementation_tag}")
     print(f"response_basis  : {bool(args.use_response_basis)}")
-    print(f"direct_source_paw: {bool(args.direct_source_paw)}")
     print(f"pairs           : {len(builder.pairs)}")
     print(f"matrix_shape    : {matrix_for_output.shape}")
     print(f"q_ext           : {q_ext.tolist()}")
-    print(f"charge_grid     : {charge_grid}")
+    print(f"charge_grid     : {builder.ngrid}")
     print(f"vasp_storage    : {not args.full_hermitian}")
     print(f"read_outcar     : {outcar}")
     print(f"read_kpoints    : {kpoints}")
-    if args.mode == "paw_orth_only":
+    if args.mode in {"paw_orth_only", "paw_full"}:
         print(f"read_poscar     : {poscar}")
         print(f"read_potcar     : {potcar}")
     print(f"txt_output      : {txt_path}")
